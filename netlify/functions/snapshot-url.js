@@ -1,18 +1,17 @@
 /**
  * Netlify Function: snapshot-url
  * Resolves an ipcamlive camera alias to a live snapshot URL
- * No API key needed — uses the undocumented player endpoint
  */
 
-export default async (req, context) => {
-  const url = new URL(req.url)
-  const alias = url.searchParams.get('alias')
+exports.handler = async function(event, context) {
+  const alias = event.queryStringParameters?.alias
 
   if (!alias) {
-    return new Response(JSON.stringify({ error: 'alias param required' }), {
-      status: 400,
+    return {
+      statusCode: 400,
       headers: { 'Content-Type': 'application/json' },
-    })
+      body: JSON.stringify({ error: 'alias param required' })
+    }
   }
 
   try {
@@ -24,24 +23,19 @@ export default async (req, context) => {
     if (!res.ok) throw new Error(`ipcamlive returned ${res.status}`)
 
     const data = await res.json()
-
-    // ipcamlive returns { address, snapshotaddress, ... }
     const snapshotUrl = data.snapshotaddress || data.address?.replace('/stream', '/snapshot.jpg')
     if (!snapshotUrl) throw new Error('No snapshot URL in ipcamlive response')
 
-    return new Response(JSON.stringify({ snapshotUrl }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-store',
-      },
-    })
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ snapshotUrl })
+    }
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+    return {
+      statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-    })
+      body: JSON.stringify({ error: err.message })
+    }
   }
 }
-
-export const config = { path: '/api/snapshot-url' }
