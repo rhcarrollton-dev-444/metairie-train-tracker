@@ -3,7 +3,7 @@
  * Fetches a camera snapshot JPEG and returns it as base64
  */
 
-const ALLOWED_HOSTS = ['ipcamlive.com', 'live.ipcamlive.com']
+const ALLOWED_HOSTS = ['ipcamlive.com']  // matches ipcamlive.com and all subdomains like s92.ipcamlive.com
 
 exports.handler = async function(event, context) {
   const imageUrl = event.queryStringParameters?.url

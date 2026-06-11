@@ -23,7 +23,15 @@ exports.handler = async function(event, context) {
     if (!res.ok) throw new Error(`ipcamlive returned ${res.status}`)
 
     const data = await res.json()
-    const snapshotUrl = data.snapshotaddress || data.address?.replace('/stream', '/snapshot.jpg')
+    const details = data.details || data
+
+    // Build snapshot URL from stream address + streamid
+    // Format: http://s92.ipcamlive.com/streams/{streamid}/snapshot.jpg
+    let snapshotUrl = data.snapshotaddress || null
+    if (!snapshotUrl && details.address && details.streamid) {
+      const base = details.address.endsWith('/') ? details.address : details.address + '/'
+      snapshotUrl = `${base}streams/${details.streamid}/snapshot.jpg`
+    }
     if (!snapshotUrl) throw new Error('No snapshot URL in ipcamlive response')
 
     return {
