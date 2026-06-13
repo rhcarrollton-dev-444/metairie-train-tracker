@@ -310,7 +310,7 @@ export function Header({ anyUrgent, analyzing, lastScan, isPolling, intervalSecs
         }}>🚂</div>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:17, fontWeight:800, letterSpacing:"-0.3px", color:"#f1f5f9", lineHeight:1.2 }}>Metairie Rail Tracker</div>
-          <div style={{ fontSize:10, color:"#475569", letterSpacing:"0.6px", marginTop:1 }}>NORFOLK SOUTHERN · OLD METAIRIE CORRIDOR · AI VISION</div>
+          <div style={{ fontSize:10, color:"#475569", letterSpacing:"0.6px", marginTop:1 }}>OLD METAIRIE CORRIDOR · NORFOLK SOUTHERN</div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:3 }}>
           {analyzing && (
@@ -381,10 +381,27 @@ export function CorridorTab({
   errors, selected, setSelected, onScan, onTogglePolling, onSetInterval,
   onReport, alerts, setAlerts,
 }) {
+  const [showControls, setShowControls] = useState(false);
+  const cameraCrossings = CROSSINGS.filter(c => c.hasCamera);
+  const otherCrossings  = [...CROSSINGS].filter(c => !c.hasCamera).reverse();
+  // Are any no-camera crossings showing a live prediction right now?
+  const anyPrediction = otherCrossings.some(c => propagated[c.id]);
+
   return (
     <div style={{ padding:14 }}>
-      <CorridorStrip detections={detections} propagated={propagated} selected={selected} setSelected={setSelected} />
+      {/* Featured: the live camera crossing(s) */}
+      {cameraCrossings.map(c => (
+        <CrossingCard
+          key={c.id} crossing={c}
+          detection={detections[c.id]} prop={propagated[c.id]}
+          isSelected={selected?.id === c.id}
+          onClick={() => setSelected(prev => prev?.id === c.id ? null : c)}
+          onReport={() => onReport(c)}
+          featured
+        />
+      ))}
 
+      {/* Detail panel appears right under the selected crossing */}
       {selected && (
         <DetailPanel
           crossing={selected} detection={detections[selected.id]}
@@ -394,22 +411,40 @@ export function CorridorTab({
         />
       )}
 
-      <div style={{ display:"grid", gap:8, marginBottom:12 }}>
-        {[...CROSSINGS].reverse().map(c => (
-          <CrossingCard
+      {/* Quiet section: downstream crossings (no camera) */}
+      <div style={{ marginTop:16, marginBottom:8, fontSize:10, color:"#475569", letterSpacing:"0.6px", display:"flex", alignItems:"center", gap:8 }}>
+        <span>DOWNSTREAM CROSSINGS</span>
+        <div style={{ flex:1, height:1, background:"#1a2435" }} />
+        <span style={{ color:"#334155", fontWeight:400, letterSpacing:0 }}>
+          {anyPrediction ? "train inbound" : "predicted from Metairie Rd"}
+        </span>
+      </div>
+      <div style={{ display:"grid", gap:6 }}>
+        {otherCrossings.map(c => (
+          <CrossingRow
             key={c.id} crossing={c}
-            detection={detections[c.id]} prop={propagated[c.id]}
+            prop={propagated[c.id]}
             isSelected={selected?.id === c.id}
             onClick={() => setSelected(prev => prev?.id === c.id ? null : c)}
-            onReport={() => onReport(c)}
           />
         ))}
       </div>
 
-      <Controls
-        analyzing={analyzing} isPolling={isPolling} intervalSecs={intervalSecs}
-        onScan={onScan} onTogglePolling={onTogglePolling} onSetInterval={onSetInterval}
-      />
+      {/* Manual controls — collapsed by default since scanning is automatic */}
+      <button onClick={() => setShowControls(v => !v)} style={{
+        marginTop:16, width:"100%", background:"none", border:"1px solid #1a2435",
+        borderRadius:8, color:"#475569", padding:"8px", fontSize:11, fontWeight:600, cursor:"pointer",
+      }}>
+        {showControls ? "Hide manual scan" : "Manual scan & settings"}
+      </button>
+      {showControls && (
+        <div style={{ marginTop:8 }}>
+          <Controls
+            analyzing={analyzing} isPolling={isPolling} intervalSecs={intervalSecs}
+            onScan={onScan} onTogglePolling={onTogglePolling} onSetInterval={onSetInterval}
+          />
+        </div>
+      )}
 
       {errors.length > 0 && (
         <div style={{ marginTop:10, padding:"10px 12px", background:"#2d0a0a", border:"1px solid #ef444433", borderRadius:8 }}>
@@ -424,39 +459,6 @@ export function CorridorTab({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Corridor strip
-// ─────────────────────────────────────────────────────────────────────────────
-function CorridorStrip({ detections, propagated, selected, setSelected }) {
-  return (
-    <div style={{ background:"#0d1420", border:"1px solid #1e2d45", borderRadius:10, padding:"14px 14px 10px", marginBottom:12, overflowX:"auto" }}>
-      <div style={{ fontSize:10, color:"#334155", marginBottom:10, letterSpacing:"0.5px" }}>
-        WEST ←──── NORFOLK SOUTHERN OLD METAIRIE CORRIDOR ────→ EAST
-      </div>
-      <div style={{ display:"flex", alignItems:"stretch", minWidth:460, gap:2 }}>
-        {CROSSINGS.map((c, i) => {
-          const st = crossingStatus(c, detections, propagated);
-          const isSel = selected?.id === c.id;
-          return (
-            <div key={c.id} style={{ display:"flex", alignItems:"center", flex:1, gap:2 }}>
-              <div onClick={() => setSelected(prev => prev?.id === c.id ? null : c)} style={{
-                flex:1, cursor:"pointer",
-                background: st.bg, border:`1.5px solid ${isSel ? st.color : st.border}`,
-                borderRadius:7, padding:"9px 6px", textAlign:"center",
-                transition:"all 0.15s", boxShadow: st.urgent ? `0 0 12px ${st.border}55` : "none",
-              }}>
-                <div style={{ fontSize:9, color:"#4b5563", marginBottom:2 }}>{c.hasCamera ? "📷" : "○"}</div>
-                <div style={{ fontSize:11, fontWeight:700, color:"#f1f5f9", marginBottom:3, lineHeight:1.2 }}>{c.short}</div>
-                <div style={{ fontSize:9, fontWeight:800, color:st.color, letterSpacing:"0.3px" }}>{st.label}</div>
-              </div>
-              {i < CROSSINGS.length - 1 && <div style={{ width:10, height:1.5, background:"#1e2d45", flexShrink:0 }} />}
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ fontSize:9, color:"#1e2d45", marginTop:8 }}>📷 live camera  ○ physics prediction  · tap crossing for details</div>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Detail panel
 // ─────────────────────────────────────────────────────────────────────────────
@@ -569,9 +571,19 @@ function Stat({ label, value, color, large }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Crossing card
+// Crossing card — featured (live camera) crossing
 // ─────────────────────────────────────────────────────────────────────────────
-function CrossingCard({ crossing, detection, prop, isSelected, onClick, onReport }) {
+function StatusDot({ color, pulse, size = 12 }) {
+  return (
+    <span style={{
+      width:size, height:size, borderRadius:"50%", flexShrink:0, display:"inline-block",
+      background:color, boxShadow:`0 0 8px ${color}`,
+      animation: pulse ? "pulse-dot 1.2s infinite" : "none",
+    }} />
+  );
+}
+
+function CrossingCard({ crossing, detection, prop, isSelected, onClick, onReport, featured }) {
   const st = crossingStatus(
     crossing,
     detection ? { [crossing.id]: detection } : {},
@@ -580,34 +592,64 @@ function CrossingCard({ crossing, detection, prop, isSelected, onClick, onReport
   return (
     <div style={{
       background: st.bg, border:`1px solid ${isSelected ? st.color : st.border}`,
-      borderRadius:10, padding:"11px 14px", cursor:"pointer",
-      transition:"border-color 0.15s", display:"flex", alignItems:"center", gap:12,
-      boxShadow: st.urgent ? `0 0 14px ${st.border}44` : "none",
+      borderRadius:12, padding:"14px 16px", cursor:"pointer",
+      transition:"border-color 0.15s", display:"flex", alignItems:"center", gap:13,
+      boxShadow: st.urgent ? `0 0 16px ${st.border}44` : "none",
     }}>
-      <div onClick={onClick} style={{ display:"flex", alignItems:"center", gap:12, flex:1, minWidth:0 }}>
-        <div style={{ width:40, height:40, borderRadius:8, flexShrink:0, background:"#0a1018", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, border:"1px solid #1e2d45" }}>
-          {crossing.hasCamera ? "📷" : "🔮"}
-        </div>
+      <div onClick={onClick} style={{ display:"flex", alignItems:"center", gap:13, flex:1, minWidth:0 }}>
+        <StatusDot color={st.color} pulse={st.urgent} size={14} />
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontWeight:700, color:"#f1f5f9", fontSize:14 }}>{crossing.name}</div>
-          <div style={{ fontSize:10, color:"#475569", marginTop:1 }}>DOT #{crossing.dot} · {crossing.hasCamera ? "Vision-detected" : "Physics-propagated"}</div>
+          <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+            <span style={{ fontWeight:700, color:"#f1f5f9", fontSize:16 }}>{crossing.name}</span>
+            <span style={{ fontSize:9, color:"#3a4a63", letterSpacing:"0.3px" }}>LIVE CAMERA</span>
+          </div>
           {detection?.notes && (
-            <div style={{ fontSize:11, color:"#64748b", marginTop:3, fontStyle:"italic", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{detection.notes}</div>
+            <div style={{ fontSize:12, color:"#64748b", marginTop:3, fontStyle:"italic", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{detection.notes}</div>
           )}
-          {prop && !crossing.hasCamera && (
-            <div style={{ fontSize:11, color:"#60a5fa", marginTop:3 }}>{prop.direction} · {prop.speed_mph} mph at {prop.sourceName}</div>
+          {!detection && (
+            <div style={{ fontSize:12, color:"#475569", marginTop:3 }}>Waiting for first scan…</div>
           )}
         </div>
         <div style={{ textAlign:"right", flexShrink:0 }}>
-          <div style={{ fontSize:12, fontWeight:800, color:st.color, letterSpacing:"0.2px" }}>{st.label}</div>
-          {detection?.confidence != null && <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>{Math.round(detection.confidence * 100)}% conf</div>}
-          {prop && !crossing.hasCamera && <div style={{ fontSize:9, color:"#475569", marginTop:2 }}>{timeAgo(prop.propagatedAt)}</div>}
+          <div style={{ fontSize:14, fontWeight:800, color:st.color, letterSpacing:"0.2px" }}>{st.label}</div>
+          {detection?.confidence != null && <div style={{ fontSize:9, color:"#3a4a63", marginTop:2 }}>{Math.round(detection.confidence * 100)}% confident</div>}
         </div>
       </div>
       <button onClick={e => { e.stopPropagation(); onReport(); }} style={{
-        background:"#0a1018", border:"1px solid #1e2d45", borderRadius:6,
-        color:"#475569", cursor:"pointer", padding:"6px 8px", fontSize:12, flexShrink:0,
-      }} title="Submit report">📝</button>
+        background:"#0a1018", border:"1px solid #1e2d45", borderRadius:7,
+        color:"#475569", cursor:"pointer", padding:"7px 9px", fontSize:13, flexShrink:0,
+      }} title="Report">📝</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Crossing row — compact, for downstream (no-camera) crossings
+// ─────────────────────────────────────────────────────────────────────────────
+function CrossingRow({ crossing, prop, isSelected, onClick }) {
+  const st = crossingStatus(crossing, {}, prop ? { [crossing.id]: prop } : {});
+  // When there's no prediction, present it calm/neutral rather than alarming
+  const idle = !prop;
+  const dotColor = idle ? "#2d3a4f" : st.color;
+  const label = idle ? "Clear" : st.label;
+  const labelColor = idle ? "#475569" : st.color;
+
+  return (
+    <div onClick={onClick} style={{
+      background: idle ? "#0b111c" : st.bg,
+      border:`1px solid ${isSelected ? st.color : (idle ? "#161f30" : st.border)}`,
+      borderRadius:10, padding:"10px 14px", cursor:"pointer",
+      display:"flex", alignItems:"center", gap:12,
+      transition:"border-color 0.15s",
+    }}>
+      <StatusDot color={dotColor} pulse={!idle && st.urgent} size={10} />
+      <div style={{ flex:1, minWidth:0 }}>
+        <span style={{ fontWeight:600, color: idle ? "#cbd5e1" : "#f1f5f9", fontSize:14 }}>{crossing.name}</span>
+        {prop && (
+          <span style={{ fontSize:11, color:"#60a5fa", marginLeft:8 }}>{prop.direction} inbound</span>
+        )}
+      </div>
+      <div style={{ fontSize:13, fontWeight:700, color:labelColor, flexShrink:0 }}>{label}</div>
     </div>
   );
 }
