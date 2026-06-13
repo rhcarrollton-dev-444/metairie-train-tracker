@@ -41,20 +41,28 @@ Rules:
 
 function propagate(detection) {
   if (!detection.train_present || !detection.direction || detection.direction === "none") return {};
+  if (detection.direction === "stopped") return {}; // only camera crossing blocked
   const speed = detection.speed_estimate_mph || DEFAULT_SPEED;
   const out = {};
   for (const c of CROSSINGS) {
     if (c.id === "metairie") continue;
-    let eta = null;
-    if (detection.direction === "westbound" && c.dist < 0) {
-      eta = (60 / speed) * Math.abs(c.dist);
-    } else if (detection.direction === "stopped" && Math.abs(c.dist) <= 0.5) {
-      eta = 0;
-    }
-    if (eta !== null) {
+    const isWestOfCamera = c.dist < 0; // all no-camera crossings are west
+    if (detection.direction === "westbound" && isWestOfCamera) {
+      // heading toward this crossing — forward ETA
       out[c.id] = {
-        eta_mins: eta, direction: detection.direction, speed_mph: speed,
+        mode: "approaching",
+        eta_mins: (60 / speed) * Math.abs(c.dist),
+        direction: detection.direction, speed_mph: speed,
         confidence: Math.max(0, (detection.confidence ?? 0.8) - 0.1),
+        sourceName: "Metairie Rd", distMiles: Math.abs(c.dist),
+      };
+    } else if (detection.direction === "eastbound" && isWestOfCamera) {
+      // already passed — clearing behind the train
+      out[c.id] = {
+        mode: "clearing",
+        eta_mins: null,
+        direction: detection.direction, speed_mph: speed,
+        confidence: Math.max(0, (detection.confidence ?? 0.8) - 0.2),
         sourceName: "Metairie Rd", distMiles: Math.abs(c.dist),
       };
     }

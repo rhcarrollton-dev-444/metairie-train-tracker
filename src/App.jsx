@@ -386,6 +386,11 @@ export function CorridorTab({
   const otherCrossings  = [...CROSSINGS].filter(c => !c.hasCamera).reverse();
   // Are any no-camera crossings showing a live prediction right now?
   const anyPrediction = otherCrossings.some(c => propagated[c.id]);
+  const anyApproaching = otherCrossings.some(c => propagated[c.id]?.mode === "approaching");
+  const anyClearing = otherCrossings.some(c => propagated[c.id]?.mode === "clearing");
+  const downstreamNote = anyApproaching ? "train approaching"
+    : anyClearing ? "train passing through"
+    : "predicted from Metairie Rd";
 
   return (
     <div style={{ padding:14 }}>
@@ -416,7 +421,7 @@ export function CorridorTab({
         <span>DOWNSTREAM CROSSINGS</span>
         <div style={{ flex:1, height:1, background:"#1a2435" }} />
         <span style={{ color:"#334155", fontWeight:400, letterSpacing:0 }}>
-          {anyPrediction ? "train inbound" : "predicted from Metairie Rd"}
+          {downstreamNote}
         </span>
       </div>
       <div style={{ display:"grid", gap:6 }}>
@@ -509,17 +514,31 @@ function DetailPanel({ crossing, detection, prop, onClose, onReport, alerts, set
         </div>
       )}
 
-      {!crossing.hasCamera && prop && (
+      {!crossing.hasCamera && prop && prop.mode === "clearing" && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ background:"#1a1530", border:"1px solid #7c3aed44", borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:"#c4b5fd", marginBottom:4 }}>Train passing through</div>
+            <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.6 }}>
+              An eastbound train (heading toward Metairie Rd / New Orleans) already passed this
+              crossing. It's clearing now — though a long train's tail may still be occupying it.
+              The camera can't see this crossing directly, so there's no exact countdown.
+            </div>
+          </div>
+          <div style={{ fontSize:10, color:"#334155" }}>Detected {timeAgo(prop.propagatedAt)}</div>
+        </div>
+      )}
+
+      {!crossing.hasCamera && prop && prop.mode === "approaching" && (
         <div style={{ marginBottom:12 }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:8 }}>
             <Stat label="ETA"           value={etaLabel(prop.eta_mins)}      color="#f97316" large />
-            <Stat label="Direction"     value={prop.direction}               color="#60a5fa" />
+            <Stat label="Direction"     value="westbound"                    color="#60a5fa" />
             <Stat label="Speed"         value={`${prop.speed_mph} mph`}      color="#f59e0b" />
             <Stat label="From Camera"   value={prop.sourceName}              color="#a78bfa" />
             <Stat label="Distance"      value={`${prop.distMiles.toFixed(2)} mi`} color="#94a3b8" />
             <Stat label="Confidence"    value={`${Math.round(prop.confidence * 100)}%`} color={confidenceBadge(prop.confidence).color} />
           </div>
-          <div style={{ fontSize:10, color:"#334155" }}>Propagated {timeAgo(prop.propagatedAt)}</div>
+          <div style={{ fontSize:10, color:"#334155" }}>Train heading west toward this crossing · detected {timeAgo(prop.propagatedAt)}</div>
         </div>
       )}
 
@@ -645,8 +664,11 @@ function CrossingRow({ crossing, prop, isSelected, onClick }) {
       <StatusDot color={dotColor} pulse={!idle && st.urgent} size={10} />
       <div style={{ flex:1, minWidth:0 }}>
         <span style={{ fontWeight:600, color: idle ? "#cbd5e1" : "#f1f5f9", fontSize:14 }}>{crossing.name}</span>
-        {prop && (
-          <span style={{ fontSize:11, color:"#60a5fa", marginLeft:8 }}>{prop.direction} inbound</span>
+        {prop && prop.mode === "approaching" && (
+          <span style={{ fontSize:11, color:"#60a5fa", marginLeft:8 }}>train approaching</span>
+        )}
+        {prop && prop.mode === "clearing" && (
+          <span style={{ fontSize:11, color:"#a78bfa", marginLeft:8 }}>train passing through</span>
         )}
       </div>
       <div style={{ fontSize:13, fontWeight:700, color:labelColor, flexShrink:0 }}>{label}</div>

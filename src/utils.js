@@ -41,6 +41,11 @@ export function crossingStatus(crossing, detections, propagated) {
   }
 
   if (prop) {
+    // Eastbound train that already passed — crossing is clearing behind it
+    if (prop.mode === "clearing") {
+      return { label: "CLEARING", color: "#a78bfa", bg: "#1a1530", border: "#7c3aed", urgent: false };
+    }
+    // Approaching (westbound) — countdown
     if (prop.eta_mins <= 0) {
       return { label: "BLOCKED",              color: "#ef4444", bg: "#450a0a", border: "#ef4444", urgent: true };
     }
