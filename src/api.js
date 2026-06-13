@@ -48,3 +48,11 @@ export async function sendAlert({ email, crossingId, crossingName, eventType, di
   if (!res.ok) throw new Error(data.error || `send-alert ${res.status}`);
   return data;
 }
+
+export async function getStatus({ history = false } = {}) {
+  const res = await fetch(`${BASE}/status${history ? "?history=1" : ""}`, {
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return res.json();
+}

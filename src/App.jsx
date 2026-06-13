@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { CROSSINGS } from "./crossings.js";
-import { getSnapshotUrl, getSnapshotImage, analyzeVision, sendAlert } from "./api.js";
+import { getSnapshotUrl, getSnapshotImage, analyzeVision, sendAlert, getStatus } from "./api.js";
 import { propagate } from "./physics.js";
 import { timeAgo, etaLabel, confidenceBadge, crossingStatus } from "./utils.js";
 
@@ -10,6 +10,20 @@ function loadLS(key, fallback) {
 }
 function saveLS(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+
+// Normalize server propagation objects to the shape the UI expects
+function mapPropagated(serverProp, checkedAt) {
+  const out = {};
+  for (const [cid, p] of Object.entries(serverProp)) {
+    out[cid] = {
+      ...p,
+      sourceId: "metairie",
+      propagatedAt: checkedAt || Date.now(),
+      fromServer: true,
+    };
+  }
+  return out;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -34,12 +48,43 @@ export default function App() {
   const [lastScan,      setLastScan]      = useState(null);
   const [clearCounts,   setClearCounts]   = useState({}); // crossingId → consecutive clear count
   const [toasts,        setToasts]        = useState([]);
+  const [serverStatus,  setServerStatus]  = useState(null); // latest cron scan from server
   const pollerRef = useRef(null);
 
   // Persist scan log + reports + alerts
   useEffect(() => saveLS("scanLog", scanLog.slice(0, MAX_HISTORY)), [scanLog]);
   useEffect(() => saveLS("reports", reports.slice(0, 200)), [reports]);
   useEffect(() => saveLS("alerts", alerts), [alerts]);
+
+  // ── Load server cron status on mount + refresh every 60s ────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    async function pull() {
+      try {
+        const { latest } = await getStatus();
+        if (cancelled || !latest) return;
+        setServerStatus(latest);
+        // Seed live state from the server scan so the app shows a train immediately
+        if (latest.metairie) {
+          setDetections(prev => ({ ...prev, metairie: { ...latest.metairie, fetchedAt: latest.checkedAt } }));
+        }
+        if (latest.propagated && Object.keys(latest.propagated).length) {
+          setPropagated(prev => ({ ...prev, ...mapPropagated(latest.propagated, latest.checkedAt) }));
+        }
+        if (!latest.metairie?.train_present) {
+          // server says clear — clear stale propagation from server source
+          setPropagated(prev => {
+            const n = { ...prev };
+            Object.keys(n).forEach(k => { if (n[k]?.fromServer) delete n[k]; });
+            return n;
+          });
+        }
+      } catch { /* server status optional */ }
+    }
+    pull();
+    const t = setInterval(pull, 60000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
 
   // ── Toast helper ────────────────────────────────────────────────────────────
   const toast = useCallback((msg, type = "info") => {
@@ -199,7 +244,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight:"100vh", background:"#080b10", display:"flex", flexDirection:"column" }}>
-      <Header anyUrgent={anyUrgent} analyzing={analyzing} lastScan={lastScan} isPolling={isPolling} intervalSecs={intervalSecs} />
+      <Header anyUrgent={anyUrgent} analyzing={analyzing} lastScan={lastScan} isPolling={isPolling} intervalSecs={intervalSecs} serverStatus={serverStatus} />
       <TabBar tab={tab} setTab={setTab} />
 
       <div style={{ flex:1, overflowY:"auto" }}>
@@ -243,7 +288,8 @@ export default function App() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Header
 // ─────────────────────────────────────────────────────────────────────────────
-export function Header({ anyUrgent, analyzing, lastScan, isPolling, intervalSecs }) {
+export function Header({ anyUrgent, analyzing, lastScan, isPolling, intervalSecs, serverStatus }) {
+  const serverAgo = serverStatus?.checkedAt ? timeAgo(serverStatus.checkedAt) : null;
   return (
     <div style={{ background:"linear-gradient(180deg,#0f172a 0%,#080b10 100%)", borderBottom:"1px solid #1e2d45", padding:"14px 16px 10px" }}>
       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
@@ -283,7 +329,12 @@ export function Header({ anyUrgent, analyzing, lastScan, isPolling, intervalSecs
           boxShadow: anyUrgent ? "0 0 8px #ef4444" : "0 0 6px #22c55e",
           animation: anyUrgent ? "pulse-dot 1.2s infinite" : "none", flexShrink:0,
         }} />
-        {anyUrgent ? "⚠  TRAIN ACTIVITY ON CORRIDOR" : "✓  ALL CROSSINGS CLEAR"}
+        <span>{anyUrgent ? "⚠  TRAIN ACTIVITY ON CORRIDOR" : "✓  ALL CROSSINGS CLEAR"}</span>
+        {serverAgo && (
+          <span style={{ marginLeft:"auto", fontWeight:400, fontSize:10, color: anyUrgent ? "#fca5a588" : "#86efac88" }}>
+            auto-checked {serverAgo}
+          </span>
+        )}
       </div>
     </div>
   );
