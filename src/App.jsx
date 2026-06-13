@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { CROSSINGS } from "./crossings.js";
+import { CROSSINGS, WATCH_CAMERAS } from "./crossings.js";
 import { getSnapshotUrl, getSnapshotImage, analyzeVision, sendAlert, getStatus } from "./api.js";
 import { propagate } from "./physics.js";
 import { timeAgo, etaLabel, confidenceBadge, crossingStatus } from "./utils.js";
@@ -264,6 +264,7 @@ export default function App() {
             onScan={runScan} onTogglePolling={() => setIsPolling(p => !p)}
             onSetInterval={setIntervalSecs} onReport={setReportTarget}
             alerts={alerts} setAlerts={setAlerts}
+            serverStatus={serverStatus}
           />
         )}
         {tab === "heatmap"  && <HeatmapTab history={allHistory} />}
@@ -379,7 +380,7 @@ export function TabBar({ tab, setTab }) {
 export function CorridorTab({
   detections, propagated, snapshots, analyzing, isPolling, intervalSecs,
   errors, selected, setSelected, onScan, onTogglePolling, onSetInterval,
-  onReport, alerts, setAlerts,
+  onReport, alerts, setAlerts, serverStatus,
 }) {
   const [showControls, setShowControls] = useState(false);
   const cameraCrossings = CROSSINGS.filter(c => c.hasCamera);
@@ -435,6 +436,9 @@ export function CorridorTab({
         ))}
       </div>
 
+      {/* Watch cameras — other JP cameras we scan for data collection */}
+      <WatchCameras serverStatus={serverStatus} />
+
       {/* Manual controls — collapsed by default since scanning is automatic */}
       <button onClick={() => setShowControls(v => !v)} style={{
         marginTop:16, width:"100%", background:"none", border:"1px solid #1a2435",
@@ -463,7 +467,66 @@ export function CorridorTab({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Corridor strip
+// Watch cameras — other JP rail cameras scanned for data collection
+// ─────────────────────────────────────────────────────────────────────────────
+function WatchCameras({ serverStatus }) {
+  const [open, setOpen] = useState(false);
+  const cams = serverStatus?.cameras || {};
+  const anyData = WATCH_CAMERAS.some(w => cams[w.id]);
+  const trainsNow = WATCH_CAMERAS.filter(w => cams[w.id]?.train_present).length;
+
+  return (
+    <div style={{ marginTop:16 }}>
+      <div style={{ marginBottom:8, fontSize:10, color:"#475569", letterSpacing:"0.6px", display:"flex", alignItems:"center", gap:8 }}>
+        <span>WATCH CAMERAS</span>
+        <div style={{ flex:1, height:1, background:"#1a2435" }} />
+        <span style={{ color:"#334155", fontWeight:400, letterSpacing:0 }}>
+          {trainsNow > 0 ? `${trainsNow} showing a train` : "data collection"}
+        </span>
+      </div>
+
+      {!anyData ? (
+        <div style={{ fontSize:11, color:"#334155", padding:"4px 2px" }}>
+          Waiting for the next automatic scan to populate camera data…
+        </div>
+      ) : (
+        <div style={{ display:"grid", gap:6 }}>
+          {WATCH_CAMERAS.map(w => {
+            const d = cams[w.id];
+            const offline = !d || d.online === false;
+            const train = d?.train_present;
+            const dotColor = offline ? "#2d3a4f" : train ? "#ef4444" : "#22c55e";
+            const label = offline ? "—" : train ? "TRAIN" : "Clear";
+            const labelColor = offline ? "#475569" : train ? "#ef4444" : "#22c55e";
+            return (
+              <div key={w.id} style={{
+                background: train ? "#1a0d0d" : "#0b111c",
+                border:`1px solid ${train ? "#ef444455" : "#161f30"}`,
+                borderRadius:10, padding:"9px 14px",
+                display:"flex", alignItems:"center", gap:12,
+              }}>
+                <StatusDot color={dotColor} pulse={train} size={9} />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <span style={{ fontWeight:600, color: offline ? "#475569" : "#e2e8f0", fontSize:13 }}>{w.name}</span>
+                  <span style={{ fontSize:10, color:"#3a4a63", marginLeft:8 }}>{w.area}</span>
+                  {train && d?.notes && (
+                    <div style={{ fontSize:10, color:"#94a3b8", marginTop:2, fontStyle:"italic", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{d.notes}</div>
+                  )}
+                </div>
+                <div style={{ fontSize:12, fontWeight:700, color:labelColor, flexShrink:0 }}>{label}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ fontSize:9, color:"#283548", marginTop:8, lineHeight:1.5 }}>
+        These cameras are scanned to learn which ones correlate with the Old Metairie corridor.
+        Once the data shows the pattern, unrelated cameras can be dropped.
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Detail panel
 // ─────────────────────────────────────────────────────────────────────────────

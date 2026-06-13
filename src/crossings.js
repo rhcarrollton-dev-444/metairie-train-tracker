@@ -1,6 +1,16 @@
-// Crossings ordered west → east along the NS Old Metairie corridor.
-// distFromMetairie: signed miles relative to the Metairie Rd camera anchor.
-// Negative = west of camera.
+// ─────────────────────────────────────────────────────────────────────────────
+// Two kinds of locations:
+//
+//  CORRIDOR crossings — the five Old Metairie crossings we actively predict for.
+//    Metairie Rd has the camera; the other four are predicted via physics from it.
+//    distFromMetairie drives ETA math (negative = west of Metairie Rd camera).
+//
+//  WATCH cameras — other Jefferson Parish rail cameras we SCAN for data collection
+//    only. We don't assume how they connect to the corridor; instead we log every
+//    timestamped detection so the cross-camera timing patterns can be MEASURED from
+//    real data over time (e.g. "does Metairie Rd westbound reliably precede Little
+//    Farms by ~25 min?"). No assumed ETAs between them yet.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const CROSSINGS = [
   {
@@ -53,6 +63,24 @@ export const CROSSINGS = [
     hasCamera: true,
     alias: "62fa4c1fb9f5c",
   },
+];
+
+// Jefferson Parish cameras we scan purely to collect detection data.
+// Order here is just the JP listing order — NOT a confirmed geographic sequence.
+export const WATCH_CAMERAS = [
+  { id: "littlefarms", name: "Little Farms Ave",   short: "Little Farms", alias: "62b47da483e1f", area: "River Ridge" },
+  { id: "central",     name: "Central Ave",        short: "Central",      alias: "63609c3400e64", area: "West Bank" },
+  { id: "avondale",    name: "Avondale Garden Rd", short: "Avondale",     alias: "635c0abb11126", area: "Avondale" },
+  { id: "filmore",     name: "Filmore St",         short: "Filmore",      alias: "6529556348194", area: "Jefferson" },
+  { id: "george",      name: "George St",          short: "George",       alias: "635c0c64414c1", area: "Jefferson" },
+  { id: "liveoak",     name: "Live Oak Blvd",      short: "Live Oak",     alias: "635c1059a967e", area: "Waggaman" },
+  { id: "willswood",   name: "Willswood Ln",       short: "Willswood",    alias: "635c112681056", area: "Waggaman" },
+];
+
+// All aliases we scan each cycle (corridor camera + watch cameras)
+export const SCAN_TARGETS = [
+  ...CROSSINGS.filter(c => c.hasCamera).map(c => ({ id: c.id, name: c.name, alias: c.alias })),
+  ...WATCH_CAMERAS.map(w => ({ id: w.id, name: w.name, alias: w.alias })),
 ];
 
 // Default assumed speed (mph) when Claude can't estimate from the image
