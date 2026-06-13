@@ -49,6 +49,7 @@ export default function App() {
   const [clearCounts,   setClearCounts]   = useState({}); // crossingId → consecutive clear count
   const [toasts,        setToasts]        = useState([]);
   const [serverStatus,  setServerStatus]  = useState(null); // latest cron scan from server
+  const [serverHistory, setServerHistory] = useState([]);   // all-day cron scan history
   const pollerRef = useRef(null);
 
   // Persist scan log + reports + alerts
@@ -61,8 +62,10 @@ export default function App() {
     let cancelled = false;
     async function pull() {
       try {
-        const { latest } = await getStatus();
-        if (cancelled || !latest) return;
+        const { latest, history } = await getStatus({ history: true });
+        if (cancelled) return;
+        if (Array.isArray(history)) setServerHistory(history);
+        if (!latest) return;
         setServerStatus(latest);
         // Seed live state from the server scan so the app shows a train immediately
         if (latest.metairie) {
@@ -239,8 +242,13 @@ export default function App() {
 
   const anyUrgent = CROSSINGS.some(c => crossingStatus(c, detections, propagated).urgent);
 
-  // Merge scan log + community reports for heatmap
-  const allHistory = [...scanLog, ...reports.map(r => ({ ...r, fromReport: true }))];
+  // Merge server cron history + local scan log + community reports for heatmap.
+  // De-dupe by id where present; server history is the bulk of the data.
+  const allHistory = [
+    ...serverHistory.map(r => ({ ...r, id: r.id || `srv-${r.ts}-${r.crossingId}`, fromServer: true })),
+    ...scanLog,
+    ...reports.map(r => ({ ...r, fromReport: true })),
+  ];
 
   return (
     <div style={{ minHeight:"100vh", background:"#080b10", display:"flex", flexDirection:"column" }}>
@@ -799,6 +807,32 @@ function HeatmapTab({ history }) {
   const trainScans  = history.filter(r => r.train_present).length;
   const trainRate   = totalScans > 0 ? ((trainScans / totalScans) * 100).toFixed(1) : "—";
 
+  // "Right now" verdict — probability for the current hour, this day of week,
+  // widened to a ±1 hour window so it's meaningful with limited data.
+  const nowVerdict = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const hour = now.getHours();
+    const hours = [(hour + 23) % 24, hour, (hour + 1) % 24];
+    let trains = 0, total = 0;
+    hours.forEach(h => { trains += grid[day][h].trains; total += grid[day][h].total; });
+    // Also compute same-hour across all days as a fallback
+    let allTrains = 0, allTotal = 0;
+    DAYS.forEach((_, d) => hours.forEach(h => { allTrains += grid[d][h].trains; allTotal += grid[d][h].total; }));
+    return {
+      hour,
+      dayTotal: total, dayProb: total > 0 ? trains / total : null,
+      allTotal, allProb: allTotal > 0 ? allTrains / allTotal : null,
+    };
+  }, [grid]);
+
+  function verdictColor(p) {
+    if (p == null) return { bg:"#0c1a2e", border:"#3b82f644", color:"#93c5fd" };
+    if (p >= 0.4)  return { bg:"#450a0a", border:"#ef4444", color:"#fca5a5" };
+    if (p >= 0.15) return { bg:"#2d1200", border:"#f97316", color:"#fdba74" };
+    return            { bg:"#052e16", border:"#22c55e", color:"#86efac" };
+  }
+
   // Peak hour
   const hourTotals = HOURS.map(h => {
     let trains = 0, total = 0;
@@ -809,6 +843,41 @@ function HeatmapTab({ history }) {
 
   return (
     <div style={{ padding:14 }}>
+      {/* "Right now" verdict — the core use case */}
+      {(() => {
+        const p = nowVerdict.dayProb ?? nowVerdict.allProb;
+        const usingFallback = nowVerdict.dayProb == null && nowVerdict.allProb != null;
+        const n = nowVerdict.dayProb != null ? nowVerdict.dayTotal : nowVerdict.allTotal;
+        const vc = verdictColor(p);
+        const hourLabel = `${nowVerdict.hour}:00–${(nowVerdict.hour + 1) % 24}:00`;
+        return (
+          <div style={{ background:vc.bg, border:`1.5px solid ${vc.border}`, borderRadius:12, padding:"16px 18px", marginBottom:14 }}>
+            <div style={{ fontSize:10, color:vc.color, opacity:0.7, letterSpacing:"0.5px", marginBottom:6 }}>
+              RIGHT NOW · {hourLabel} {usingFallback ? "(all days)" : "(this weekday)"}
+            </div>
+            {p == null ? (
+              <div style={{ fontSize:15, fontWeight:700, color:vc.color }}>
+                Not enough data yet for this time
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize:26, fontWeight:800, color:vc.color, lineHeight:1.1 }}>
+                  {Math.round(p * 100)}% chance of a train
+                </div>
+                <div style={{ fontSize:12, color:vc.color, opacity:0.85, marginTop:6 }}>
+                  {p >= 0.4 ? "⚠ High — consider an alternate route"
+                   : p >= 0.15 ? "Moderate — check the live status above before leaving"
+                   : "✓ Low — usually clear at this time"}
+                </div>
+                <div style={{ fontSize:10, color:vc.color, opacity:0.55, marginTop:8 }}>
+                  Based on {n} past check{n !== 1 ? "s" : ""} around this hour
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Summary stats */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:14 }}>
         <SummaryCard label="Total Scans" value={totalScans} color="#60a5fa" />

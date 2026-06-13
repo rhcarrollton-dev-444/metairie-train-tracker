@@ -146,7 +146,7 @@ export default async (req) => {
       crossingName: "Metairie Rd",
       notes: detection.notes,
     });
-    history = history.slice(0, 1000);
+    history = history.slice(0, 8000);
     await store.setJSON("history", history);
 
     console.log(`Scan complete: train=${detection.train_present}`);
