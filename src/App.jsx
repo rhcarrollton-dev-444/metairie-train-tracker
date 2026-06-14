@@ -1039,13 +1039,13 @@ function HeatmapTab({ history }) {
 
       {/* Grid */}
       <div style={{ background:"#0d1420", border:"1px solid #1e2d45", borderRadius:10, padding:12, overflowX:"auto" }}>
-        <div style={{ fontSize:10, color:"#334155", marginBottom:10, letterSpacing:"0.5px" }}>TRAIN PROBABILITY BY HOUR & DAY OF WEEK</div>
+        <div style={{ fontSize:11, color:"#93c5fd", marginBottom:10, letterSpacing:"0.8px", fontWeight:700 }}>TRAIN PROBABILITY BY HOUR & DAY OF WEEK</div>
 
         <div style={{ display:"grid", gridTemplateColumns:`28px repeat(24, 1fr)`, gap:2, minWidth:600 }}>
           {/* Hour headers */}
           <div />
           {HOURS.map(h => (
-            <div key={h} style={{ fontSize:8, color:"#334155", textAlign:"center", paddingBottom:4 }}>
+            <div key={h} style={{ fontSize:9, color:"#94a3b8", textAlign:"center", paddingBottom:4, fontWeight:600 }}>
               {h % 3 === 0 ? `${h}h` : ""}
             </div>
           ))}
@@ -1053,7 +1053,7 @@ function HeatmapTab({ history }) {
           {/* Rows */}
           {DAYS.map((day, d) => (
             <>
-              <div key={`label-${d}`} style={{ fontSize:9, color:"#475569", display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:6 }}>{day}</div>
+              <div key={`label-${d}`} style={{ fontSize:10, color:"#cbd5e1", display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:6, fontWeight:600 }}>{day}</div>
               {HOURS.map(h => {
                 const cell = grid[d][h];
                 const prob = cell.total > 0 ? Math.round((cell.trains / cell.total) * 100) : null;
@@ -1074,21 +1074,21 @@ function HeatmapTab({ history }) {
 
         {/* Legend */}
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:12 }}>
-          <span style={{ fontSize:9, color:"#334155" }}>Low</span>
+          <span style={{ fontSize:10, color:"#94a3b8", fontWeight:600 }}>Low</span>
           <div style={{ display:"flex", gap:2 }}>
             {[0, 0.2, 0.4, 0.6, 0.8, 1].map(v => (
               <div key={v} style={{ width:16, height:10, borderRadius:2, background: cellColor({ trains: v, total: 1 }) }} />
             ))}
           </div>
-          <span style={{ fontSize:9, color:"#334155" }}>High</span>
-          <span style={{ fontSize:9, color:"#1e2d45", marginLeft:"auto" }}>Gray = no data</span>
+          <span style={{ fontSize:10, color:"#94a3b8", fontWeight:600 }}>High</span>
+          <span style={{ fontSize:9, color:"#64748b", marginLeft:"auto" }}>Gray = no data</span>
         </div>
       </div>
 
       {/* Hour breakdown bar chart */}
       {totalScans >= 5 && (
         <div style={{ background:"#0d1420", border:"1px solid #1e2d45", borderRadius:10, padding:12, marginTop:12 }}>
-          <div style={{ fontSize:10, color:"#334155", marginBottom:10, letterSpacing:"0.5px" }}>TRAIN PROBABILITY BY HOUR (ALL DAYS)</div>
+          <div style={{ fontSize:11, color:"#93c5fd", marginBottom:10, letterSpacing:"0.8px", fontWeight:700 }}>TRAIN PROBABILITY BY HOUR (ALL DAYS)</div>
           <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:60 }}>
             {hourTotals.map(({ h, prob, total }) => (
               <div key={h} title={`${h}:00 — ${Math.round(prob * 100)}% (${total} scans)`}
@@ -1105,7 +1105,7 @@ function HeatmapTab({ history }) {
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
             {[0,6,12,18,23].map(h => (
-              <span key={h} style={{ fontSize:8, color:"#334155" }}>{h}h</span>
+              <span key={h} style={{ fontSize:9, color:"#94a3b8", fontWeight:600 }}>{h}h</span>
             ))}
           </div>
         </div>
@@ -1117,7 +1117,7 @@ function HeatmapTab({ history }) {
 function SummaryCard({ label, value, color }) {
   return (
     <div style={{ background:"#0d1420", border:"1px solid #1e2d45", borderRadius:8, padding:"10px 12px", textAlign:"center" }}>
-      <div style={{ fontSize:9, color:"#475569", marginBottom:4, letterSpacing:"0.5px" }}>{label}</div>
+      <div style={{ fontSize:9, color:"#94a3b8", marginBottom:4, letterSpacing:"0.5px", fontWeight:600 }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:800, color }}>{value}</div>
     </div>
   );
