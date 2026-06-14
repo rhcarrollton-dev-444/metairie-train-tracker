@@ -138,31 +138,34 @@ export default async (req) => {
   const cameras = {};      // id → detection (or offline marker)
   let metairieDetection = null;
 
-  for (const cam of CAMERAS) {
-    try {
-      const res = await scanCamera(cam, apiKey);
-      if (!res.online) {
-        cameras[cam.id] = { online: false, checkedAt: now };
-        continue;
-      }
-      const det = res.detection;
-      cameras[cam.id] = { online: true, checkedAt: now, ...det };
-      if (cam.corridor) metairieDetection = det;
+  // Scan ALL cameras in parallel — sequential was timing out (~15s for 8 cameras).
+  // Promise.allSettled means one slow/failing camera can't break the others.
+  const results = await Promise.allSettled(
+    CAMERAS.map(cam => scanCamera(cam, apiKey).then(res => ({ cam, res })))
+  );
 
-      // Log every detection (train or clear) for pattern analysis
-      history.unshift({
-        ts: now,
-        crossingId: cam.id,
-        crossingName: cam.name,
-        train_present: det.train_present,
-        direction: det.direction,
-        speed_estimate_mph: det.speed_estimate_mph,
-        confidence: det.confidence,
-        notes: det.notes,
-      });
-    } catch (err) {
-      cameras[cam.id] = { online: false, checkedAt: now, error: err.message };
+  for (const r of results) {
+    if (r.status === "rejected") continue; // scanCamera threw before returning a cam ref
+    const { cam, res } = r.value;
+    if (!res.online) {
+      cameras[cam.id] = { online: false, checkedAt: now };
+      continue;
     }
+    const det = res.detection;
+    cameras[cam.id] = { online: true, checkedAt: now, ...det };
+    if (cam.corridor) metairieDetection = det;
+
+    // Log every detection (train or clear) for pattern analysis
+    history.unshift({
+      ts: now,
+      crossingId: cam.id,
+      crossingName: cam.name,
+      train_present: det.train_present,
+      direction: det.direction,
+      speed_estimate_mph: det.speed_estimate_mph,
+      confidence: det.confidence,
+      notes: det.notes,
+    });
   }
 
   const propagated = metairieDetection ? propagate(metairieDetection) : {};
