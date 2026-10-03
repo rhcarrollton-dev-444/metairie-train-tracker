@@ -65,12 +65,29 @@ export default function Heatmap({ history }) {
     [CORRIDOR_IDS, INFERRED_IDS, scanCounts]
   )
 
+  // Corridor UNION history: one synthetic record per 5-min scan tick, train_present
+  // if ANY corridor camera saw a train that tick. Pooling the cameras' rows instead
+  // (averaging them) understates the corridor — a 15mph train needs ~6 min to cover
+  // the 1.5 mi between the cameras, so each camera misses most trains the other
+  // catches (verified 2026-10-03: 63 overlap ticks, union 28 vs labarre-own 8).
+  const corridorUnionHistory = useMemo(() => {
+    const ticks = new Map()
+    for (const r of history) {
+      if (!r.ts || !CORRIDOR_CAM_IDS.has(r.crossingId)) continue
+      const k = Math.round(r.ts / 300000)
+      const prev = ticks.get(k)
+      if (!prev) ticks.set(k, { ts: r.ts, crossingId: 'corridor', train_present: !!r.train_present })
+      else if (r.train_present) prev.train_present = true
+    }
+    return [...ticks.values()]
+  }, [history, CORRIDOR_CAM_IDS])
+
   const filtered = useMemo(() => {
     if (filterId === 'all') return history
-    // Corridor crossing without enough own data: show the corridor cameras' records
-    if (usesCorridorHistory(filterId)) return history.filter((r) => CORRIDOR_CAM_IDS.has(r.crossingId))
+    // Corridor crossing without enough own data: show the corridor UNION records
+    if (usesCorridorHistory(filterId)) return corridorUnionHistory
     return history.filter((r) => r.crossingId === filterId)
-  }, [history, filterId, usesCorridorHistory, CORRIDOR_CAM_IDS])
+  }, [history, filterId, usesCorridorHistory, corridorUnionHistory])
 
   const grid = useMemo(() => {
     const cells = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ total: 0, trains: 0 })))
@@ -174,14 +191,16 @@ export default function Heatmap({ history }) {
         }
       }
     }
-    const corridorBucket = mkBucket() // merged corridor-camera history for inference
+    const corridorBucket = mkBucket() // UNION of corridor cams per scan tick (see corridorUnionHistory)
     for (const r of history) {
       if (!r.ts || !r.crossingId) continue
       const rd = new Date(r.ts)
       let b = buckets[r.crossingId]
       if (!b) b = buckets[r.crossingId] = mkBucket()
       add(b, r, rd)
-      if (CORRIDOR_CAM_IDS.has(r.crossingId)) add(corridorBucket, r, rd)
+    }
+    for (const r of corridorUnionHistory) {
+      add(corridorBucket, r, new Date(r.ts))
     }
 
     const statsFrom = (b) => {
@@ -202,7 +221,7 @@ export default function Heatmap({ history }) {
       }
       return { ...c, ...statsFrom(buckets[c.id]) }
     })
-  }, [history, ALL_CROSSINGS, CORRIDOR_CAM_IDS, usesCorridorHistory])
+  }, [history, ALL_CROSSINGS, corridorUnionHistory, usesCorridorHistory])
 
   const filters = [{ id: 'all', name: 'All Crossings' }, ...CORRIDOR, ...DOWNSTREAM]
   const prob = now.dayProb ?? now.allProb
