@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CORRIDOR } from '../data/crossings'
+import { CORRIDOR, DOWNSTREAM } from '../data/crossings'
 import HeatmapStat from './HeatmapStat'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -101,7 +101,56 @@ export default function Heatmap({ history }) {
     return best.h != null ? best : null
   }, [hourly])
 
-  const filters = [{ id: 'all', name: 'All Crossings' }, ...CORRIDOR]
+  // Per-crossing probability: for EVERY crossing with scan data (corridor cameras
+  // + all watch cameras), compute the right-now probability (same ±1hr window,
+  // this weekday, falling back to all days) plus the overall train rate.
+  // Uses the FULL history, not the filtered view, so the panel is stable.
+  const ALL_CROSSINGS = useMemo(
+    () => [
+      ...CORRIDOR.map((c) => ({ id: c.id, short: c.short, area: 'Old Metairie' })),
+      ...DOWNSTREAM.map((c) => ({ id: c.id, short: c.short, area: c.area })),
+    ],
+    []
+  )
+
+  const perCrossing = useMemo(() => {
+    const d = new Date()
+    const day = d.getDay()
+    const win = [(d.getHours() + 23) % 24, d.getHours(), (d.getHours() + 1) % 24]
+    const winSet = new Set(win)
+
+    // one pass over full history, bucketed per crossing
+    const buckets = {}
+    for (const r of history) {
+      if (!r.ts || !r.crossingId) continue
+      let b = buckets[r.crossingId]
+      if (!b) b = buckets[r.crossingId] = { total: 0, trains: 0, nowDayT: 0, nowDayTr: 0, nowAllT: 0, nowAllTr: 0 }
+      b.total++
+      if (r.train_present) b.trains++
+      const rd = new Date(r.ts)
+      if (winSet.has(rd.getHours())) {
+        b.nowAllT++
+        if (r.train_present) b.nowAllTr++
+        if (rd.getDay() === day) {
+          b.nowDayT++
+          if (r.train_present) b.nowDayTr++
+        }
+      }
+    }
+
+    return ALL_CROSSINGS.map((c) => {
+      const b = buckets[c.id]
+      if (!b || b.total === 0) return { ...c, prob: null, rate: null, n: 0 }
+      // prefer this-weekday window with enough samples, else all-days window, else overall rate
+      const prob =
+        b.nowDayT >= 5 ? b.nowDayTr / b.nowDayT
+        : b.nowAllT >= 5 ? b.nowAllTr / b.nowAllT
+        : b.trains / b.total
+      return { ...c, prob, rate: b.trains / b.total, n: b.total }
+    })
+  }, [history, ALL_CROSSINGS])
+
+  const filters = [{ id: 'all', name: 'All Crossings' }, ...CORRIDOR, ...DOWNSTREAM]
   const prob = now.dayProb ?? now.allProb
   const pc = probColor(prob)
   const plural = (n) => (n === 1 ? '' : 's')
@@ -134,6 +183,46 @@ export default function Heatmap({ history }) {
             </div>
           </>
         )}
+      </div>
+
+      {/* Per-crossing probability — every crossing with scan data */}
+      <div style={{ background: '#0d1420', border: '1px solid #1e2d45', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: '#93c5fd', letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>
+          TRAIN PROBABILITY BY CROSSING · RIGHT NOW
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 8 }}>
+          {perCrossing.map((c) => {
+            const cpc = probColor(c.prob)
+            return (
+              <div
+                key={c.id}
+                onClick={() => setFilterId(filterId === c.id ? 'all' : c.id)}
+                style={{
+                  background: cpc.bg,
+                  border: `1px solid ${filterId === c.id ? '#3b82f6' : cpc.border}`,
+                  borderRadius: 8,
+                  padding: '8px 10px',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#f1f5f9' }}>{c.short}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: cpc.color }}>
+                    {c.prob == null ? '—' : `${Math.round(c.prob * 100)}%`}
+                  </span>
+                </div>
+                <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>
+                  {c.area}
+                  {c.n > 0 && ` · ${Math.round(c.rate * 100)}% overall · ${c.n} scans`}
+                  {c.n === 0 && ' · no data yet'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: 9, color: '#283548', marginTop: 8 }}>
+          Right-now = this time of day (±1 hr). Tap a crossing to filter the grid below to it.
+        </div>
       </div>
 
       {/* Stats */}
