@@ -27,10 +27,25 @@ function probColor(prob) {
 export default function Heatmap({ history }) {
   const [filterId, setFilterId] = useState('all')
 
-  const filtered = useMemo(
-    () => (filterId === 'all' ? history : history.filter((r) => r.crossingId === filterId)),
-    [history, filterId]
+  // Camera-less corridor crossings (Farnham/Hollywood/Atherton) sit on the same
+  // single track between the Metairie and Labarre cameras — every train seen at
+  // either camera rolls through them. They have no scan history of their own, so
+  // their stats are INFERRED from the corridor cameras' combined history.
+  const CORRIDOR_CAM_IDS = useMemo(
+    () => new Set(CORRIDOR.filter((c) => c.hasCamera).map((c) => c.id)),
+    []
   )
+  const INFERRED_IDS = useMemo(
+    () => new Set(CORRIDOR.filter((c) => !c.hasCamera).map((c) => c.id)),
+    []
+  )
+
+  const filtered = useMemo(() => {
+    if (filterId === 'all') return history
+    // No-camera corridor crossing: show the corridor cameras' records (inferred)
+    if (INFERRED_IDS.has(filterId)) return history.filter((r) => CORRIDOR_CAM_IDS.has(r.crossingId))
+    return history.filter((r) => r.crossingId === filterId)
+  }, [history, filterId, INFERRED_IDS, CORRIDOR_CAM_IDS])
 
   const grid = useMemo(() => {
     const cells = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ total: 0, trains: 0 })))
@@ -121,13 +136,10 @@ export default function Heatmap({ history }) {
 
     // one pass over full history, bucketed per crossing
     const buckets = {}
-    for (const r of history) {
-      if (!r.ts || !r.crossingId) continue
-      let b = buckets[r.crossingId]
-      if (!b) b = buckets[r.crossingId] = { total: 0, trains: 0, nowDayT: 0, nowDayTr: 0, nowAllT: 0, nowAllTr: 0 }
+    const mkBucket = () => ({ total: 0, trains: 0, nowDayT: 0, nowDayTr: 0, nowAllT: 0, nowAllTr: 0 })
+    const add = (b, r, rd) => {
       b.total++
       if (r.train_present) b.trains++
-      const rd = new Date(r.ts)
       if (winSet.has(rd.getHours())) {
         b.nowAllT++
         if (r.train_present) b.nowAllTr++
@@ -137,18 +149,31 @@ export default function Heatmap({ history }) {
         }
       }
     }
+    const corridorBucket = mkBucket() // merged corridor-camera history for inference
+    for (const r of history) {
+      if (!r.ts || !r.crossingId) continue
+      const rd = new Date(r.ts)
+      let b = buckets[r.crossingId]
+      if (!b) b = buckets[r.crossingId] = mkBucket()
+      add(b, r, rd)
+      if (CORRIDOR_CAM_IDS.has(r.crossingId)) add(corridorBucket, r, rd)
+    }
 
-    return ALL_CROSSINGS.map((c) => {
-      const b = buckets[c.id]
-      if (!b || b.total === 0) return { ...c, prob: null, rate: null, n: 0 }
-      // prefer this-weekday window with enough samples, else all-days window, else overall rate
+    const statsFrom = (b) => {
+      if (!b || b.total === 0) return { prob: null, rate: null, n: 0 }
       const prob =
         b.nowDayT >= 5 ? b.nowDayTr / b.nowDayT
         : b.nowAllT >= 5 ? b.nowAllTr / b.nowAllT
         : b.trains / b.total
-      return { ...c, prob, rate: b.trains / b.total, n: b.total }
+      return { prob, rate: b.trains / b.total, n: b.total }
+    }
+
+    return ALL_CROSSINGS.map((c) => {
+      // No-camera corridor crossings inherit the merged corridor-camera stats
+      if (INFERRED_IDS.has(c.id)) return { ...c, ...statsFrom(corridorBucket), inferred: true }
+      return { ...c, ...statsFrom(buckets[c.id]) }
     })
-  }, [history, ALL_CROSSINGS])
+  }, [history, ALL_CROSSINGS, CORRIDOR_CAM_IDS, INFERRED_IDS])
 
   const filters = [{ id: 'all', name: 'All Crossings' }, ...CORRIDOR, ...DOWNSTREAM]
   const prob = now.dayProb ?? now.allProb
@@ -214,6 +239,7 @@ export default function Heatmap({ history }) {
                 <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>
                   {c.area}
                   {c.n > 0 && ` · ${Math.round(c.rate * 100)}% overall · ${c.n} scans`}
+                  {c.n > 0 && c.inferred && ' · from corridor cams'}
                   {c.n === 0 && ' · no data yet'}
                 </div>
               </div>
@@ -273,6 +299,12 @@ export default function Heatmap({ history }) {
         <div style={{ fontSize: 11, color: '#93c5fd', letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>
           TRAIN PROBABILITY BY HOUR & DAY OF WEEK
         </div>
+        {INFERRED_IDS.has(filterId) && (
+          <div style={{ fontSize: 10, color: '#fbbf24', marginBottom: 8 }}>
+            No camera at this crossing — showing the corridor cameras&apos; history. Same track,
+            so every train they see passes here too.
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '28px repeat(24,1fr)', gap: 2, minWidth: 600 }}>
           <div />
           {HOURS.map((h) => (
