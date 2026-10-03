@@ -1,19 +1,24 @@
+import { useState } from 'react'
 import { DOWNSTREAM } from '../data/crossings'
+import CameraView from './CameraView'
 
 // "WATCH CAMERAS" panel — shows downstream camera status from server polling (`Cp`).
-// These are scanned server-side; the app itself only scans the metairie camera.
+// These are scanned server-side; the app itself only scans the corridor cameras.
 // CN crossings with propagated predictions are shown in the dedicated CN section above.
+// Tap any camera card to open its live view.
 export default function WatchCameras({ serverStatus, propagated }) {
   const cameras = serverStatus?.cameras || {}
-  
+  const [openCam, setOpenCam] = useState(null) // crossing id with live view open
+
   // Filter to show only cameras without propagated predictions or on separate corridors
   const visibleCrossings = DOWNSTREAM.filter((c) => {
     if (c.corridor === 'cn' && propagated?.[c.id]) return false // shown in CN section
     return true
   })
-  
+
   const hasData = visibleCrossings.some((c) => cameras[c.id])
   const trainCount = visibleCrossings.filter((c) => cameras[c.id]?.train_present).length
+  const openCrossing = visibleCrossings.find((c) => c.id === openCam)
 
   return (
     <div style={{ marginTop: 18 }}>
@@ -21,23 +26,33 @@ export default function WatchCameras({ serverStatus, propagated }) {
         <span style={{ fontSize: 10, color: '#475569', letterSpacing: 0.6 }}>WATCH CAMERAS</span>
         <div style={{ flex: 1, height: 1, background: '#1a2435' }} />
         <span style={{ fontSize: 10, color: '#334155' }}>
-          {trainCount > 0 ? `${trainCount} showing a train` : 'data collection'}
+          {trainCount > 0 ? `${trainCount} showing a train` : 'tap a camera for live view'}
         </span>
       </div>
+      {openCrossing && (
+        <CameraView
+          alias={openCrossing.alias}
+          name={openCrossing.name}
+          onClose={() => setOpenCam(null)}
+        />
+      )}
       {hasData ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 8 }}>
           {visibleCrossings.map((c) => {
             const cam = cameras[c.id]
             const offline = !cam || cam.online === false
             const train = cam?.train_present
+            const isOpen = openCam === c.id
             return (
               <div
                 key={c.id}
+                onClick={() => setOpenCam(isOpen ? null : c.id)}
                 style={{
                   background: train ? '#1a0d0d' : '#0b111c',
-                  border: `1px solid ${train ? '#ef444455' : '#161f30'}`,
+                  border: `1px solid ${isOpen ? '#3b82f6' : train ? '#ef444455' : '#161f30'}`,
                   borderRadius: 10,
                   padding: '9px 14px',
+                  cursor: 'pointer',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -52,6 +67,7 @@ export default function WatchCameras({ serverStatus, propagated }) {
                     }}
                   />
                   <span style={{ fontSize: 13, color: '#f1f5f9', fontWeight: 600, flex: 1 }}>{c.short}</span>
+                  <span style={{ fontSize: 10, color: '#3a4a63' }}>📷</span>
                 </div>
                 <div style={{ fontSize: 10, color: '#3a4a63', marginTop: 2 }}>{c.area}</div>
                 <div style={{ fontSize: 10, color: offline ? '#475569' : train ? '#ef4444' : '#22c55e' }}>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import StatTile, { ConfidenceTile } from './StatTile'
+import CameraView from './CameraView'
 import { statusBadge, formatEta, relativeTime } from '../lib/helpers'
 
 // Expanded detail panel for a selected crossing (`Ep`): detection tiles, physics
@@ -11,6 +12,7 @@ export default function DetailPanel({ crossing, detection, prop, onClose, onRepo
 
   const [email, setEmail] = useState(alerts[crossing.id] || '')
   const [subscribed, setSubscribed] = useState(!!alerts[crossing.id])
+  const [showCamera, setShowCamera] = useState(false)
 
   const saveAlert = () => {
     if (!email.includes('@')) return
@@ -52,6 +54,29 @@ export default function DetailPanel({ crossing, detection, prop, onClose, onRepo
           ×
         </button>
       </div>
+
+      {crossing.alias && (
+        <>
+          <button
+            onClick={() => setShowCamera((s) => !s)}
+            style={{
+              width: '100%',
+              marginBottom: 10,
+              background: showCamera ? '#1a2535' : '#1e3a5f',
+              border: '1px solid #3b82f6',
+              color: '#60a5fa',
+              borderRadius: 7,
+              padding: '8px 12px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {showCamera ? 'Hide live camera' : '📷 View live camera'}
+          </button>
+          {showCamera && <CameraView alias={crossing.alias} name={crossing.name} />}
+        </>
+      )}
 
       {crossing.hasCamera && detection ? (
         <>

@@ -22,12 +22,13 @@ const CORRIDOR = [
 ];
 
 // CN McComb crossings west of the Labarre junction (29.97075, -90.16399).
-// Westbound trains continue onto these. [OSM_REFINEMENT_NEEDED: estimated distances]
+// Westbound trains continue onto these. Distances measured from stitched OSM
+// CN mainline polyline 2026-10-02 (Central is closer than Little Farms).
 const CN_CHAIN = [
-  { id: "littlefarms", name: "Little Farms Ave", dist: -3.5 },
-  { id: "central",     name: "Central Ave",      dist: -4.8 },
-  { id: "filmore",     name: "Filmore St",       dist: -5.5 },
-  { id: "george",      name: "George St",        dist: -5.9 },
+  { id: "central",     name: "Central Ave",      dist: -2.90 },
+  { id: "littlefarms", name: "Little Farms Ave", dist: -5.46 },
+  { id: "filmore",     name: "Filmore St",       dist: -6.73 },
+  { id: "george",      name: "George St",        dist: -7.77 },
 ];
 
 // Every camera we scan. Corridor cameras anchor propagation; the rest are watch

@@ -15,16 +15,19 @@ export const CORRIDOR = [
 //
 // Crossings west of the Labarre junction (29.97075, -90.16399) on CN McComb
 // track have distFromMetairie and corridor='cn' — westbound trains propagate 
-// through the junction onto CN. [OSM_REFINEMENT_NEEDED: distances are estimates
-// based on typical metro spacing; rebuild from stitched CN polyline.]
+// through the junction onto CN. Distances measured 2026-10-02 from a stitched
+// OSM CN-mainline polyline (junction = 2.307 track-mi from Metairie):
+//   Central 0.60 past junction, Little Farms 3.15, Filmore 4.42, George ~5.47.
+// Note the true order: Central is CLOSER than Little Farms (earlier estimates
+// had it reversed). George St viewpoint is the Kenner crossing near Hollandey.
 //
 // Live Oak, Willswood, and Avondale are on a separate UP corridor (Livonia/
 // Avondale subdivisions) and do not connect to Old Metairie near the area.
 export const DOWNSTREAM = [
-  { id: 'littlefarms', name: 'Little Farms Ave', short: 'Little Farms', alias: '62b47da483e1f', area: 'River Ridge', distFromMetairie: -3.5, corridor: 'cn' },
-  { id: 'central', name: 'Central Ave', short: 'Central', alias: '63609c3400e64', area: 'West Bank', distFromMetairie: -4.8, corridor: 'cn' },
-  { id: 'filmore', name: 'Filmore St', short: 'Filmore', alias: '6529556348194', area: 'Jefferson', distFromMetairie: -5.5, corridor: 'cn' },
-  { id: 'george', name: 'George St', short: 'George', alias: '635c0c64414c1', area: 'Jefferson', distFromMetairie: -5.9, corridor: 'cn' },
+  { id: 'central', name: 'Central Ave', short: 'Central', alias: '63609c3400e64', area: 'Jefferson', distFromMetairie: -2.90, corridor: 'cn' },
+  { id: 'littlefarms', name: 'Little Farms Ave', short: 'Little Farms', alias: '62b47da483e1f', area: 'River Ridge', distFromMetairie: -5.46, corridor: 'cn' },
+  { id: 'filmore', name: 'Filmore St', short: 'Filmore', alias: '6529556348194', area: 'Kenner', distFromMetairie: -6.73, corridor: 'cn' },
+  { id: 'george', name: 'George St', short: 'George', alias: '635c0c64414c1', area: 'Kenner', distFromMetairie: -7.77, corridor: 'cn' },
   { id: 'avondale', name: 'Avondale Garden Rd', short: 'Avondale', alias: '635c0abb11126', area: 'Avondale', distFromMetairie: null, corridor: 'up' },
   { id: 'liveoak', name: 'Live Oak Blvd', short: 'Live Oak', alias: '635c1059a967e', area: 'Waggaman', distFromMetairie: null, corridor: 'up' },
   { id: 'willswood', name: 'Willswood Ln', short: 'Willswood', alias: '635c112681056', area: 'Waggaman', distFromMetairie: null, corridor: 'up' },
