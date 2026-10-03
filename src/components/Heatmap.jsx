@@ -365,6 +365,13 @@ export default function Heatmap({ history }) {
           <div style={{ fontSize: 11, color: '#93c5fd', letterSpacing: 0.8, fontWeight: 700, marginBottom: 10 }}>
             TRAIN PROBABILITY BY HOUR (ALL DAYS)
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24,1fr)', gap: 2, marginBottom: 2 }}>
+            {hourly.map((x) => (
+              <div key={x.h} style={{ fontSize: 9, fontWeight: 700, color: x.total > 0 ? '#f1f5f9' : '#1e2d45', textAlign: 'center' }}>
+                {x.total > 0 ? Math.round(x.prob * 100) : ''}
+              </div>
+            ))}
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24,1fr)', gap: 2, height: 120, alignItems: 'flex-end' }}>
             {hourly.map((x) => (
               <div
@@ -396,22 +403,33 @@ function Row({ day, row, maxRatio }) {
   return (
     <>
       <div style={{ fontSize: 12, fontWeight: 800, color: '#f1f5f9', display: 'flex', alignItems: 'center' }}>{DAYS[day]}</div>
-      {row.map((cell, h) => (
-        <div
-          key={h}
-          title={
-            cell.total === 0
-              ? `${DAYS[day]} ${hour12(h)} — no data`
-              : `${DAYS[day]} ${hour12(h)} — ${cell.trains}/${cell.total} (${Math.round((cell.trains / cell.total) * 100)}%)`
-          }
-          style={{
-            height: 18,
-            borderRadius: 2,
-            background: cellColor(cell, maxRatio),
-            border: '1px solid #0d1420',
-          }}
-        />
-      ))}
+      {row.map((cell, h) => {
+        const pct = cell.total > 0 ? Math.round((cell.trains / cell.total) * 100) : null
+        return (
+          <div
+            key={h}
+            title={
+              cell.total === 0
+                ? `${DAYS[day]} ${hour12(h)} — no data`
+                : `${DAYS[day]} ${hour12(h)} — ${cell.trains}/${cell.total} (${pct}%)`
+            }
+            style={{
+              height: 20,
+              borderRadius: 2,
+              background: cellColor(cell, maxRatio),
+              border: '1px solid #0d1420',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 9,
+              fontWeight: 700,
+              color: pct == null ? 'transparent' : pct / 100 / maxRatio > 0.55 ? '#fff' : '#cbd5e1',
+            }}
+          >
+            {pct != null ? pct : ''}
+          </div>
+        )
+      })}
     </>
   )
 }
