@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { CORRIDOR, DOWNSTREAM } from '../data/crossings'
 import HeatmapStat from './HeatmapStat'
 
@@ -31,21 +31,39 @@ export default function Heatmap({ history }) {
   // single track between the Metairie and Labarre cameras — every train seen at
   // either camera rolls through them. They have no scan history of their own, so
   // their stats are INFERRED from the corridor cameras' combined history.
+  // The same fallback covers a corridor CAMERA whose own history is still thin
+  // (e.g. Labarre, added to the scan cron much later than Metairie).
+  const THIN_SCANS = 200
   const CORRIDOR_CAM_IDS = useMemo(
     () => new Set(CORRIDOR.filter((c) => c.hasCamera).map((c) => c.id)),
     []
   )
+  const CORRIDOR_IDS = useMemo(() => new Set(CORRIDOR.map((c) => c.id)), [])
   const INFERRED_IDS = useMemo(
     () => new Set(CORRIDOR.filter((c) => !c.hasCamera).map((c) => c.id)),
     []
   )
 
+  // Scan counts per crossing (to detect thin camera history)
+  const scanCounts = useMemo(() => {
+    const m = {}
+    for (const r of history) if (r.crossingId) m[r.crossingId] = (m[r.crossingId] || 0) + 1
+    return m
+  }, [history])
+
+  // A corridor crossing uses merged corridor-camera history when it has no camera
+  // OR its own history is still too thin to be meaningful.
+  const usesCorridorHistory = useCallback(
+    (id) => CORRIDOR_IDS.has(id) && (INFERRED_IDS.has(id) || (scanCounts[id] || 0) < THIN_SCANS),
+    [CORRIDOR_IDS, INFERRED_IDS, scanCounts]
+  )
+
   const filtered = useMemo(() => {
     if (filterId === 'all') return history
-    // No-camera corridor crossing: show the corridor cameras' records (inferred)
-    if (INFERRED_IDS.has(filterId)) return history.filter((r) => CORRIDOR_CAM_IDS.has(r.crossingId))
+    // Corridor crossing without enough own data: show the corridor cameras' records
+    if (usesCorridorHistory(filterId)) return history.filter((r) => CORRIDOR_CAM_IDS.has(r.crossingId))
     return history.filter((r) => r.crossingId === filterId)
-  }, [history, filterId, INFERRED_IDS, CORRIDOR_CAM_IDS])
+  }, [history, filterId, usesCorridorHistory, CORRIDOR_CAM_IDS])
 
   const grid = useMemo(() => {
     const cells = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => ({ total: 0, trains: 0 })))
@@ -169,11 +187,15 @@ export default function Heatmap({ history }) {
     }
 
     return ALL_CROSSINGS.map((c) => {
-      // No-camera corridor crossings inherit the merged corridor-camera stats
-      if (INFERRED_IDS.has(c.id)) return { ...c, ...statsFrom(corridorBucket), inferred: true }
+      // Corridor crossings without a camera (or with thin camera history) inherit
+      // the merged corridor-camera stats
+      if (usesCorridorHistory(c.id)) {
+        const own = statsFrom(buckets[c.id])
+        return { ...c, ...statsFrom(corridorBucket), ownN: own.n, inferred: true }
+      }
       return { ...c, ...statsFrom(buckets[c.id]) }
     })
-  }, [history, ALL_CROSSINGS, CORRIDOR_CAM_IDS, INFERRED_IDS])
+  }, [history, ALL_CROSSINGS, CORRIDOR_CAM_IDS, usesCorridorHistory])
 
   const filters = [{ id: 'all', name: 'All Crossings' }, ...CORRIDOR, ...DOWNSTREAM]
   const prob = now.dayProb ?? now.allProb
@@ -239,7 +261,7 @@ export default function Heatmap({ history }) {
                 <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>
                   {c.area}
                   {c.n > 0 && ` · ${Math.round(c.rate * 100)}% overall · ${c.n} scans`}
-                  {c.n > 0 && c.inferred && ' · from corridor cams'}
+                  {c.n > 0 && c.inferred && (c.ownN > 0 ? ` · corridor data (own: ${c.ownN})` : ' · from corridor cams')}
                   {c.n === 0 && ' · no data yet'}
                 </div>
               </div>
@@ -299,10 +321,11 @@ export default function Heatmap({ history }) {
         <div style={{ fontSize: 11, color: '#93c5fd', letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 }}>
           TRAIN PROBABILITY BY HOUR & DAY OF WEEK
         </div>
-        {INFERRED_IDS.has(filterId) && (
+        {usesCorridorHistory(filterId) && (
           <div style={{ fontSize: 10, color: '#fbbf24', marginBottom: 8 }}>
-            No camera at this crossing — showing the corridor cameras&apos; history. Same track,
-            so every train they see passes here too.
+            {INFERRED_IDS.has(filterId)
+              ? 'No camera at this crossing — showing the corridor cameras\u2019 history. Same track, so every train they see passes here too.'
+              : 'This camera\u2019s own history is still building — showing the combined corridor history (same track) until it has enough scans.'}
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '28px repeat(24,1fr)', gap: 2, minWidth: 600 }}>
