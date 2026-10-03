@@ -5,6 +5,13 @@ import HeatmapStat from './HeatmapStat'
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 
+// American 12-hour label: 0 -> 12a, 6 -> 6a, 12 -> 12p, 18 -> 6p
+function hour12(h) {
+  const ampm = h < 12 ? 'a' : 'p'
+  const hr = h % 12 === 0 ? 12 : h % 12
+  return `${hr}${ampm}`
+}
+
 function cellColor(cell, maxRatio) {
   if (cell.total === 0) return '#0d1420'
   const ratio = cell.trains / cell.total
@@ -303,10 +310,11 @@ export default function Heatmap({ history }) {
               style={{
                 background: active ? '#1e3a5f' : '#0a1018',
                 border: `1px solid ${active ? '#3b82f6' : '#1e2d45'}`,
-                color: active ? '#60a5fa' : '#475569',
+                color: active ? '#60a5fa' : '#f1f5f9',
+                fontWeight: 700,
                 borderRadius: 7,
                 padding: '6px 10px',
-                fontSize: 11,
+                fontSize: 12,
                 cursor: 'pointer',
               }}
             >
@@ -328,11 +336,11 @@ export default function Heatmap({ history }) {
               : 'This camera\u2019s own history is still building — showing the combined corridor history (same track) until it has enough scans.'}
           </div>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: '28px repeat(24,1fr)', gap: 2, minWidth: 600 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '42px repeat(24,1fr)', gap: 2, minWidth: 600 }}>
           <div />
           {HOURS.map((h) => (
-            <div key={h} style={{ fontSize: 8, color: '#475569', textAlign: 'center' }}>
-              {h % 3 === 0 ? `${h}h` : ''}
+            <div key={h} style={{ fontSize: 11, fontWeight: 800, color: '#f1f5f9', textAlign: 'center' }}>
+              {h % 3 === 0 ? hour12(h) : ''}
             </div>
           ))}
           {grid.map((row, day) => (
@@ -361,7 +369,7 @@ export default function Heatmap({ history }) {
             {hourly.map((x) => (
               <div
                 key={x.h}
-                title={`${x.h}:00 — ${x.trains}/${x.total} (${Math.round(x.prob * 100)}%)`}
+                title={`${hour12(x.h)} — ${x.trains}/${x.total} (${Math.round(x.prob * 100)}%)`}
                 style={{
                   height: `${Math.max(2, x.prob * 100)}%`,
                   minHeight: x.total > 0 ? 2 : 0,
@@ -373,8 +381,8 @@ export default function Heatmap({ history }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24,1fr)', gap: 2, marginTop: 4 }}>
             {HOURS.map((h) => (
-              <div key={h} style={{ fontSize: 8, color: '#475569', textAlign: 'center' }}>
-                {[0, 6, 12, 18, 23].includes(h) ? `${h}h` : ''}
+              <div key={h} style={{ fontSize: 11, fontWeight: 800, color: '#f1f5f9', textAlign: 'center' }}>
+                {[0, 6, 12, 18].includes(h) ? hour12(h) : h === 23 ? '11p' : ''}
               </div>
             ))}
           </div>
@@ -387,14 +395,14 @@ export default function Heatmap({ history }) {
 function Row({ day, row, maxRatio }) {
   return (
     <>
-      <div style={{ fontSize: 9, color: '#475569', display: 'flex', alignItems: 'center' }}>{DAYS[day]}</div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: '#f1f5f9', display: 'flex', alignItems: 'center' }}>{DAYS[day]}</div>
       {row.map((cell, h) => (
         <div
           key={h}
           title={
             cell.total === 0
-              ? `${DAYS[day]} ${h}:00 — no data`
-              : `${DAYS[day]} ${h}:00 — ${cell.trains}/${cell.total} (${Math.round((cell.trains / cell.total) * 100)}%)`
+              ? `${DAYS[day]} ${hour12(h)} — no data`
+              : `${DAYS[day]} ${hour12(h)} — ${cell.trains}/${cell.total} (${Math.round((cell.trains / cell.total) * 100)}%)`
           }
           style={{
             height: 18,
