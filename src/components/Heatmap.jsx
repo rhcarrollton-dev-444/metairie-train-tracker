@@ -275,7 +275,7 @@ export default function Heatmap({ history }) {
             )
           })}
         </div>
-        <div style={{ fontSize: 9, color: '#283548', marginTop: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9', marginTop: 8 }}>
           Right-now = this time of day (±1 hr). Tap a crossing to filter the grid below to it.
         </div>
       </div>
