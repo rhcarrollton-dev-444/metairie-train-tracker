@@ -1,0 +1,11 @@
+{
+  "appId": "com.rhcarrollton.metairierailtracker",
+  "appName": "Metairie Rail Tracker",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "never"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
