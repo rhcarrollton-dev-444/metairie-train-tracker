@@ -375,6 +375,7 @@ export default function App() {
           <MapView
             detections={detections}
             propagated={propagated}
+            serverStatus={serverStatus}
             onSelect={(c) => {
               setSelected(c)
               setTab('corridor')
