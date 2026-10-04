@@ -2,6 +2,8 @@
 // Fetches a snapshot image from ipcamlive CDN and returns it as base64.
 // This runs server-side so there are no CORS issues fetching from ipcamlive servers.
 
+import { jsonResponse, preflight } from "./_cors.js";
+
 const ALLOWED_HOSTS = [
   "ipcamlive.com",
   ".ipcamlive.com",
@@ -19,14 +21,17 @@ function isAllowedUrl(urlStr) {
 }
 
 export const handler = async (event) => {
+  const pf = preflight(event);
+  if (pf) return pf;
+
   const imageUrl = event.queryStringParameters?.url;
 
   if (!imageUrl) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Missing url parameter" }) };
+    return jsonResponse({ error: "Missing url parameter" }, { status: 400 });
   }
 
   if (!isAllowedUrl(imageUrl)) {
-    return { statusCode: 403, body: JSON.stringify({ error: "URL not in allowlist" }) };
+    return jsonResponse({ error: "URL not in allowlist" }, { status: 403 });
   }
 
   try {
@@ -40,42 +45,29 @@ export const handler = async (event) => {
     });
 
     if (!res.ok) {
-      return {
-        statusCode: res.status,
-        body: JSON.stringify({ error: `Upstream returned ${res.status}` }),
-      };
+      return jsonResponse({ error: `Upstream returned ${res.status}` }, { status: res.status });
     }
 
     const contentType = res.headers.get("content-type") || "image/jpeg";
     const buffer = await res.arrayBuffer();
 
     if (buffer.byteLength < 500) {
-      return {
-        statusCode: 502,
-        body: JSON.stringify({ error: "Image too small — camera may be offline" }),
-      };
+      return jsonResponse({ error: "Image too small — camera may be offline" }, { status: 502 });
     }
 
     // Convert to base64
     const base64 = Buffer.from(buffer).toString("base64");
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
-      body: JSON.stringify({
+    return jsonResponse(
+      {
         base64,
         mediaType: contentType.split(";")[0].trim(),
         sizeBytes: buffer.byteLength,
         fetchedAt: new Date().toISOString(),
-      }),
-    };
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
-    return {
-      statusCode: 502,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return jsonResponse({ error: err.message }, { status: 502 });
   }
 };

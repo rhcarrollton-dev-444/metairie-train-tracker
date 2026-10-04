@@ -2,22 +2,21 @@
 // Resolves a live snapshot URL from an ipcamlive camera alias.
 // Called by the frontend to avoid CORS restrictions on ipcamlive.com.
 
+import { jsonResponse, preflight } from "./_cors.js";
+
 export const handler = async (event) => {
+  const pf = preflight(event);
+  if (pf) return pf;
+
   const alias = event.queryStringParameters?.alias;
 
   if (!alias) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Missing alias parameter" }),
-    };
+    return jsonResponse({ error: "Missing alias parameter" }, { status: 400 });
   }
 
   // Validate alias is alphanumeric (prevent abuse)
   if (!/^[a-f0-9]{13}$/.test(alias)) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: "Invalid alias format" }),
-    };
+    return jsonResponse({ error: "Invalid alias format" }, { status: 400 });
   }
 
   const url = `https://ipcamlive.com/player/getcamerastreamstate.php?alias=${alias}`;
@@ -39,24 +38,17 @@ export const handler = async (event) => {
     try {
       data = JSON.parse(text);
     } catch {
-      return {
-        statusCode: 502,
-        body: JSON.stringify({ error: "Invalid JSON from ipcamlive", raw: text.slice(0, 200) }),
-      };
+      return jsonResponse({ error: "Invalid JSON from ipcamlive", raw: text.slice(0, 200) }, { status: 502 });
     }
 
     if (!data?.details?.address || !data?.details?.streamid) {
       // Camera may be offline
-      return {
-        statusCode: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          online: false,
-          snapshotUrl: null,
-          streamUrl: null,
-          raw: data,
-        }),
-      };
+      return jsonResponse({
+        online: false,
+        snapshotUrl: null,
+        streamUrl: null,
+        raw: data,
+      });
     }
 
     const base = data.details.address;
@@ -64,23 +56,16 @@ export const handler = async (event) => {
     const snapshotUrl = `${base}streams/${streamId}/snapshot.jpg`;
     const streamUrl = `${base}streams/${streamId}/stream.m3u8`;
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      },
-      body: JSON.stringify({
+    return jsonResponse(
+      {
         online: true,
         snapshotUrl,
         streamUrl,
         alias,
-      }),
-    };
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
-    return {
-      statusCode: 502,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return jsonResponse({ error: err.message }, { status: 502 });
   }
 };

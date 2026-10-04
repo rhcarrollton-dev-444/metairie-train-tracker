@@ -130,7 +130,13 @@ export default function App() {
 
         if (detection.train_present) {
           const propagatedNow = propagate(detection, T)
-          setPropagated(propagatedNow) // full replace (see BUGS.md)
+          // Merge, don't replace: keep server-propagated and community-propagated
+          // entries for OTHER sources; this source's entries are replaced below.
+          setPropagated((prev) => {
+            const next = {}
+            for (const [k, v] of Object.entries(prev)) if (v.sourceId !== T.id) next[k] = v
+            return { ...next, ...propagatedNow }
+          })
           clearCountsRef.current = { ...clearCountsRef.current, [T.id]: 0 }
           for (const [id, entry] of Object.entries(propagatedNow)) {
             const crossing = CORRIDOR.find((c) => c.id === id)
@@ -208,12 +214,24 @@ export default function App() {
         if (latest.propagated && Object.keys(latest.propagated).length) {
           setPropagated((prev) => ({ ...prev, ...markServerPropagated(latest.propagated, latest.checkedAt) }))
         }
-        if (!latest.metairie?.train_present) {
-          setPropagated((prev) => {
-            const next = {}
-            for (const [k, v] of Object.entries(prev)) if (!v.fromServer) next[k] = v
-            return next
-          })
+        // Per-source cleanup: when a source camera is clear, drop only the entries
+        // that SOURCE propagated (keyed on propagated entry's sourceId), not the
+        // whole server-propagated set.
+        const sources = [latest.metairie, latest.labarre]
+        for (const src of sources) {
+          const srcId = src?.crossingId || (src === latest.metairie ? 'metairie' : 'labarre')
+          const srcTrain = !!src?.train_present
+          if (src && srcId && !srcTrain) {
+            setPropagated((prev) => {
+              const next = {}
+              let dropped = false
+              for (const [k, v] of Object.entries(prev)) {
+                if (v.fromServer && v.sourceId === srcId) { dropped = true; continue }
+                next[k] = v
+              }
+              return dropped ? next : prev
+            })
+          }
         }
       } catch {
         /* swallow */
@@ -235,31 +253,59 @@ export default function App() {
       toast(`Report submitted for ${report.crossingName}`, 'success')
       setReportTarget(null)
 
-      if (report.train_present) {
-        // Try CORRIDOR first, then DOWNSTREAM
-        const T = CORRIDOR.find((c) => c.id === report.crossingId) || 
-                  DOWNSTREAM.find((c) => c.id === report.crossingId)
-        
-        if (T && T.distFromMetairie != null) {
-          const fakeDet = {
-            train_present: true,
-            direction: report.direction,
-            speed_estimate_mph: report.speed_mph || null,
-            confidence: 0.7,
+      const T = CORRIDOR.find((c) => c.id === report.crossingId) ||
+                DOWNSTREAM.find((c) => c.id === report.crossingId)
+
+      if (!report.train_present) {
+        // All-clear report: drop this crossing's propagated entries and, if the
+        // reporter is at the SOURCE camera crossing, fire train_cleared for it.
+        setPropagated((prev) => {
+          const next = {}
+          for (const [k, v] of Object.entries(prev)) {
+            if (k === report.crossingId || v.sourceId === report.crossingId) continue
+            next[k] = v
           }
-          const propagatedNow = propagate(fakeDet, T)
-          setPropagated((prev) => ({ ...prev, ...propagatedNow }))
-          
-          // Fire alerts for all propagated crossings
-          for (const [id, entry] of Object.entries(propagatedNow)) {
-            const crossing = CORRIDOR.find((c) => c.id === id) || 
-                            DOWNSTREAM.find((c) => c.id === id)
-            if (crossing) {
-              sendAlertFor(crossing, 'train_detected', fakeDet, entry.eta_mins)
-            }
+          return next
+        })
+        if (T && T.hasCamera) {
+          const hasPropagated = Object.values(propagatedRef.current).some((x) => x.sourceId === T.id)
+          if (hasPropagated) {
+            sendAlertFor(T, 'train_cleared', null, null)
+            toast(`✓ ${T.name} all-clear confirmed`, 'success')
           }
-          sendAlertFor(T, 'train_detected', fakeDet, null)
         }
+        return
+      }
+
+      if (T && T.distFromMetairie != null) {
+        const fakeDet = {
+          train_present: true,
+          direction: report.direction,
+          speed_estimate_mph: report.speed_mph || null,
+          confidence: 0.7,
+        }
+        const propagatedNow = propagate(fakeDet, T)
+        setPropagated((prev) => ({ ...prev, ...propagatedNow }))
+
+        // Fire alerts for all propagated crossings
+        for (const [id, entry] of Object.entries(propagatedNow)) {
+          const crossing = CORRIDOR.find((c) => c.id === id) ||
+                          DOWNSTREAM.find((c) => c.id === id)
+          if (crossing) {
+            sendAlertFor(crossing, 'train_detected', fakeDet, entry.eta_mins)
+          }
+        }
+        sendAlertFor(T, 'train_detected', fakeDet, null)
+      } else if (T) {
+        // No propagation possible (no distance on this corridor), but the report
+        // itself is a sighting at that crossing — fire its own alert.
+        sendAlertFor(T, 'train_detected', {
+          train_present: true,
+          direction: report.direction,
+          speed_estimate_mph: report.speed_mph || null,
+          confidence: 0.7,
+          notes: 'from community report',
+        }, null)
       }
     },
     [toast, sendAlertFor]
