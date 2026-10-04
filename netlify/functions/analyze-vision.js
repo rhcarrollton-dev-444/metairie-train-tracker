@@ -5,6 +5,8 @@
 // Accepts POST with { base64, mediaType, crossingId, crossingName }
 // Returns the structured train detection JSON.
 
+import { jsonResponse, preflight } from "./_cors.js";
+
 const VISION_PROMPT = `You are a train detection system analyzing a live railroad crossing camera image from Metairie, Louisiana (Norfolk Southern Old Metairie corridor).
 
 Analyze this image and respond ONLY with a valid JSON object — no markdown, no code fences, no extra text whatsoever.
@@ -31,34 +33,34 @@ Detection rules:
 - Confidence should reflect how clearly you can see the scene, not just whether a train is present`;
 
 export const handler = async (event) => {
+  const pf = preflight(event);
+  if (pf) return pf;
+
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
+    return jsonResponse({ error: "Method not allowed" }, { status: 405 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "ANTHROPIC_API_KEY environment variable not set" }),
-    };
+    return jsonResponse({ error: "ANTHROPIC_API_KEY environment variable not set" }, { status: 500 });
   }
 
   let body;
   try {
     body = JSON.parse(event.body);
   } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON body" }) };
+    return jsonResponse({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const { base64, mediaType = "image/jpeg", crossingId, crossingName } = body;
 
   if (!base64) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Missing base64 field" }) };
+    return jsonResponse({ error: "Missing base64 field" }, { status: 400 });
   }
 
   // Basic size check — reject if suspiciously large (>4MB base64 ≈ 3MB image)
   if (base64.length > 5_500_000) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Image too large" }) };
+    return jsonResponse({ error: "Image too large" }, { status: 400 });
   }
 
   try {
@@ -95,10 +97,10 @@ export const handler = async (event) => {
     const data = await res.json();
 
     if (!res.ok) {
-      return {
-        statusCode: res.status,
-        body: JSON.stringify({ error: data?.error?.message || "Anthropic API error", detail: data }),
-      };
+      return jsonResponse(
+        { error: data?.error?.message || "Anthropic API error", detail: data },
+        { status: res.status }
+      );
     }
 
     const text = data.content?.find((b) => b.type === "text")?.text || "";
@@ -108,26 +110,16 @@ export const handler = async (event) => {
     try {
       detection = JSON.parse(clean);
     } catch {
-      return {
-        statusCode: 502,
-        body: JSON.stringify({ error: "Could not parse model response as JSON", raw: clean }),
-      };
+      return jsonResponse({ error: "Could not parse model response as JSON", raw: clean }, { status: 502 });
     }
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...detection,
-        crossingId,
-        analyzedAt: new Date().toISOString(),
-        model: "claude-haiku-4-5-20251001",
-      }),
-    };
+    return jsonResponse({
+      ...detection,
+      crossingId,
+      analyzedAt: new Date().toISOString(),
+      model: "claude-haiku-4-5-20251001",
+    });
   } catch (err) {
-    return {
-      statusCode: 502,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return jsonResponse({ error: err.message }, { status: 502 });
   }
 };

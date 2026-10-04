@@ -1,6 +1,8 @@
 // netlify/functions/send-alert.js
 // Sends email alerts when a train is detected or cleared.
 // Uses Resend (resend.com) — free tier is 3,000 emails/month.
+
+import { jsonResponse, preflight } from "./_cors.js";
 // Requires RESEND_API_KEY and ALERT_FROM_EMAIL env vars in Netlify.
 // Rate-limited: one alert per crossing per 30 minutes (tracked via in-memory map,
 // resets on function cold start — good enough for serverless).
@@ -9,36 +11,36 @@ const cooldowns = new Map(); // crossingId → last alert timestamp
 const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
 export const handler = async (event) => {
+  const pf = preflight(event);
+  if (pf) return pf;
+
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
+    return jsonResponse({ error: "Method not allowed" }, { status: 405 });
   }
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.ALERT_FROM_EMAIL || "alerts@metairierailtracker.com";
 
   if (!apiKey) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "RESEND_API_KEY not configured" }),
-    };
+    return jsonResponse({ error: "RESEND_API_KEY not configured" }, { status: 500 });
   }
 
   let body;
   try {
     body = JSON.parse(event.body);
   } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
+    return jsonResponse({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const { email, crossingId, crossingName, eventType, direction, speed, eta, notes } = body;
 
   if (!email || !crossingId || !eventType) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Missing required fields" }) };
+    return jsonResponse({ error: "Missing required fields" }, { status: 400 });
   }
 
   // Basic email validation
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { statusCode: 400, body: JSON.stringify({ error: "Invalid email address" }) };
+    return jsonResponse({ error: "Invalid email address" }, { status: 400 });
   }
 
   // Cooldown check
@@ -46,10 +48,10 @@ export const handler = async (event) => {
   const lastAlert = cooldowns.get(cooldownKey) || 0;
   if (Date.now() - lastAlert < COOLDOWN_MS) {
     const minsRemaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastAlert)) / 60000);
-    return {
-      statusCode: 429,
-      body: JSON.stringify({ error: `Cooldown active — ${minsRemaining} min remaining` }),
-    };
+    return jsonResponse(
+      { error: `Cooldown active — ${minsRemaining} min remaining` },
+      { status: 429 }
+    );
   }
 
   const isTrainEvent = eventType === "train_detected";
@@ -114,23 +116,13 @@ export const handler = async (event) => {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return {
-        statusCode: res.status,
-        body: JSON.stringify({ error: err.message || "Resend API error" }),
-      };
+      return jsonResponse({ error: err.message || "Resend API error" }, { status: res.status });
     }
 
     cooldowns.set(cooldownKey, Date.now());
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sent: true, subject }),
-    };
+    return jsonResponse({ sent: true, subject });
   } catch (err) {
-    return {
-      statusCode: 502,
-      body: JSON.stringify({ error: err.message }),
-    };
+    return jsonResponse({ error: err.message }, { status: 502 });
   }
 };

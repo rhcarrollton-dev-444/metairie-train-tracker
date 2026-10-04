@@ -3,6 +3,7 @@
 // The browser app calls this on load for an instant answer.
 
 import { getStore } from "@netlify/blobs";
+import { CORS_HEADERS } from "./_cors.js";
 
 export default async (req) => {
   const store = getStore("rail-status");
@@ -25,12 +26,13 @@ export default async (req) => {
       headers: {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
+        ...CORS_HEADERS,
       },
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   }
 };

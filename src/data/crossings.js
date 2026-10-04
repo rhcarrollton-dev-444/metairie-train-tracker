@@ -48,4 +48,9 @@ export const MAX_SCAN_LOG = 500 // ks — max scanLog entries persisted to local
 
 // Backend base path. Relative so it works same-origin in production on Netlify.
 // In dev, vite.config.js proxies this to the live backend (see VITE_BACKEND_TARGET).
-export const API_BASE = '/.netlify/functions'
+// The Capacitor iOS WebView is a different origin entirely (capacitor://localhost),
+// so there we use the absolute production URL.
+const isCapacitor = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()
+export const API_BASE = isCapacitor
+  ? 'https://fascinating-platypus-46f604.netlify.app/.netlify/functions'
+  : '/.netlify/functions'
