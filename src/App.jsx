@@ -376,6 +376,7 @@ export default function App() {
             detections={detections}
             propagated={propagated}
             serverStatus={serverStatus}
+            history={combinedHistory}
             onSelect={(c) => {
               setSelected(c)
               setTab('corridor')
