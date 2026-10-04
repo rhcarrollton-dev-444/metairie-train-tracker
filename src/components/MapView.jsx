@@ -92,9 +92,10 @@ export default function Map({ detections, propagated, onSelect }) {
       zoomControl: false,
       attributionControl: true,
     })
-    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://stadiamaps.com/">Stadia</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://openstreetmap.org">OSM</a>',
-      maxZoom: 20,
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
+      maxZoom: 19,
+      className: 'mtt-dark-tiles',
     }).addTo(map)
 
     // rail lines — casing + fill for a polished two-tone look
