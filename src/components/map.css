@@ -1,155 +1,190 @@
-/* ── Metairie Rail Tracker: Map (train-first, touch-first) ──────── */
+/* ── Metairie Rail Tracker: Map v3 (concept #2 inspired) ─────────── */
 
-/* dark invert for OSM standard tiles — free, no API key ever */
 .mtt-dark-tiles {
-  filter: brightness(0.6) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.3) brightness(0.75);
+  filter: brightness(0.55) invert(1) contrast(3) hue-rotate(200deg) saturate(0.25) brightness(0.7);
 }
 
 /* ── glass panels ── */
 .mtt-glass {
-  position: absolute;
-  background: linear-gradient(145deg, rgba(13, 20, 32, 0.88), rgba(8, 11, 16, 0.92));
-  backdrop-filter: blur(16px) saturate(1.3);
-  -webkit-backdrop-filter: blur(16px) saturate(1.3);
-  border: 1px solid rgba(80, 110, 160, 0.22);
+  background: linear-gradient(145deg, rgba(13, 20, 32, 0.88), rgba(8, 11, 16, 0.93));
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(80, 110, 160, 0.2);
   border-radius: 14px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* ── header strip ── */
+.mtt-hdr {
+  position: absolute; top: 12px; left: 12px;
   z-index: 1000;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+}
+.mtt-hdr-title { font-size: 14px; font-weight: 800; color: #e2e8f0; letter-spacing: 0.3px; }
+.mtt-hdr-live { font-size: 11px; font-weight: 700; color: #22c55e; }
+.mtt-hdr-live-on { color: #ef4444; animation: mttPulse 1.2s infinite; }
+
+/* ── directional labels ── */
+.mtt-dir {
+  position: absolute; z-index: 1000;
+  font-size: 11px; font-weight: 600; color: rgba(148, 163, 184, 0.5);
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+.mtt-dir-w { left: 14px; top: 50%; transform: translateY(-50%); }
+.mtt-dir-e { right: 14px; top: 50%; transform: translateY(-50%); }
+
+/* ── crossing markers (⊗ style from concept #2) ── */
+.mtt-cx { pointer-events: auto; }
+.mtt-cx-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  min-width: 60px;
+}
+.mtt-cx-x {
+  font-size: 20px; font-weight: 900;
+  text-shadow: 0 0 8px currentColor;
+  line-height: 1;
+}
+.mtt-cx-name {
+  font-size: 10px; font-weight: 700; color: #94a3b8;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  white-space: nowrap;
+}
+.mtt-cx-eta {
+  font-size: 9px; font-weight: 800; color: #fff;
+  padding: 1.5px 8px; border-radius: 20px;
+  margin-top: 1px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
 }
 
-/* ── top status banner ── */
-.mtt-banner {
-  top: 12px; left: 12px; right: 12px;
-  display: flex; align-items: center; gap: 12px;
+/* ── train dot (glowing circle, not emoji — concept #2 style) ── */
+.mtt-train-dot { pointer-events: none; }
+.mtt-td-wrap {
+  position: relative;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+}
+.mtt-td-core {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--tc);
+  box-shadow: 0 0 14px var(--tc), 0 0 28px var(--tc);
+  z-index: 2;
+}
+.mtt-td-ring {
+  position: absolute; inset: 2px;
+  border-radius: 50%;
+  border: 2px solid var(--tc);
+  opacity: 0.7;
+  animation: mttRing 2s ease-out infinite;
+}
+.mtt-td-ring2 { animation-delay: 1s; }
+.mtt-td-arrow {
+  position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+  font-size: 12px; font-weight: 900; color: var(--tc);
+  text-shadow: 0 0 6px var(--tc);
+}
+
+/* ── bottom train info cards (concept #2 layout) ── */
+.mtt-cards {
+  position: absolute; bottom: 14px; left: 12px; right: 70px;
+  z-index: 1000;
+  display: flex; gap: 10px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.mtt-cards::-webkit-scrollbar { display: none; }
+
+.mtt-card {
+  flex: 0 0 auto;
+  min-width: 200px; max-width: 260px;
   padding: 14px 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.15s;
 }
-.mtt-banner-active { border-color: rgba(239, 68, 68, 0.35); }
-.mtt-banner-clear { border-color: rgba(80, 110, 160, 0.15); }
-.mtt-banner-dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  background: #ef4444; flex: 0 0 auto;
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+.mtt-card:active { transform: scale(0.97); }
+
+.mtt-card-top {
+  display: flex; justify-content: space-between; align-items: baseline;
 }
-.mtt-banner-text { flex: 1; min-width: 0; }
-.mtt-banner-title {
-  font-size: 14px; font-weight: 800; color: #f1f5f9;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.mtt-banner-sub {
-  font-size: 11px; color: #64748b; margin-top: 2px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.mtt-card-dir { font-size: 11px; font-weight: 700; }
+.mtt-card-eta { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; }
+
+.mtt-card-dest {
+  font-size: 12px; font-weight: 600; color: #94a3b8; margin-top: 2px;
 }
 
-/* ── FAB controls (big 48px touch targets) ── */
+.mtt-card-stats {
+  display: flex; gap: 10px;
+  font-size: 10px; color: #64748b; margin-top: 6px;
+}
+.mtt-card-stats span { white-space: nowrap; }
+
+.mtt-card-upcoming {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid rgba(80, 110, 160, 0.15);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.mtt-card-next {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px;
+}
+.mtt-card-next-x { font-size: 12px; font-weight: 900; }
+.mtt-card-next-name { flex: 1; color: #94a3b8; font-weight: 600; }
+.mtt-card-next-eta { font-weight: 800; font-size: 11px; }
+
+/* ── FABs ── */
 .mtt-fab-row {
-  position: absolute; bottom: 20px; right: 14px;
-  display: flex; flex-direction: column; gap: 10px;
+  position: absolute; bottom: 14px; right: 12px;
+  display: flex; flex-direction: column; gap: 8px;
   z-index: 1000;
 }
 .mtt-fab {
   width: 48px; height: 48px;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(145deg, rgba(13, 20, 32, 0.9), rgba(8, 11, 16, 0.95));
+  background: linear-gradient(145deg, rgba(13, 20, 32, 0.92), rgba(8, 11, 16, 0.96));
   backdrop-filter: blur(12px);
   border: 1px solid rgba(80, 110, 160, 0.3);
   border-radius: 14px;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-  transition: all 0.15s;
   -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s;
 }
-.mtt-fab:active { transform: scale(0.92); background: rgba(30, 58, 95, 0.7); }
-.mtt-fab-train { border-color: rgba(239, 68, 68, 0.4); }
-.mtt-fab-train:active { border-color: #ef4444; }
+.mtt-fab:active { transform: scale(0.9); }
+.mtt-fab-train { border-color: rgba(239, 68, 68, 0.35); }
 
-/* ── crossing pins (only shown when relevant) ── */
-.mtt-xing { pointer-events: auto; }
-.mtt-xing-pin {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  pointer-events: auto; cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.mtt-xing-label {
-  font-size: 11px; font-weight: 700; color: #cbd5e1;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7);
-  white-space: nowrap;
-}
-.mtt-xing-sub {
-  font-size: 10px; font-weight: 800; color: #080b10;
-  padding: 1px 8px; border-radius: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  white-space: nowrap;
-}
-.mtt-xing-urgent .mtt-xing-sub { animation: mttPulse 1.1s infinite; }
+/* ── track glow ── */
+.mtt-glow { filter: blur(3px); }
 
-/* ── train locomotive marker ── */
-.mtt-loco { pointer-events: none; }
-.mtt-loco-wrap {
-  position: relative;
-  width: 50px; height: 50px;
-  display: flex; align-items: center; justify-content: center;
-}
-.mtt-loco-icon {
-  font-size: 28px;
-  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.8));
-  z-index: 2;
-}
-.mtt-loco-ring {
-  position: absolute; inset: -2px;
-  border-radius: 50%;
-  border: 2.5px solid rgba(239, 68, 68, 0.7);
-  animation: mttRing 1.8s ease-out infinite;
-}
-.mtt-loco-ring2 { animation-delay: 0.9s; }
-.mtt-loco-info {
-  position: absolute; top: 42px; left: 50%;
-  transform: translateX(-50%);
-  display: flex; gap: 6px;
-  background: rgba(8, 11, 16, 0.9);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 8px;
-  padding: 3px 8px;
-  white-space: nowrap;
-}
-.mtt-loco-speed {
-  font-size: 11px; font-weight: 800; color: #fca5a5;
-}
-.mtt-loco-dir {
-  font-size: 10px; font-weight: 600; color: #64748b;
-}
-
-/* ── trail (dashed red showing where train has been) ── */
-.mtt-trail { filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.4)); }
-
-/* ── track lines ── */
-.mtt-track-line { transition: opacity 0.3s; }
+/* ── trail ── */
+.mtt-trail { filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.3)); }
 
 /* ── animations ── */
 @keyframes mttPulse {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.15); opacity: 0.85; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 @keyframes mttRing {
-  0% { transform: scale(0.6); opacity: 1; }
-  100% { transform: scale(2.2); opacity: 0; }
+  0% { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(2); opacity: 0; }
 }
 
-/* ── leaflet overrides (dark + touch-friendly) ── */
+/* ── leaflet overrides ── */
 .leaflet-control-attribution {
-  background: rgba(8, 11, 16, 0.7) !important;
-  color: #475569 !important;
-  font-size: 8px !important;
+  background: rgba(8, 11, 16, 0.65) !important;
+  color: #334155 !important; font-size: 8px !important;
 }
-.leaflet-control-attribution a { color: #334155 !important; }
+.leaflet-control-attribution a { color: #1e293b !important; }
 .leaflet-bar a {
-  background: rgba(13, 20, 32, 0.88) !important;
+  background: rgba(13, 20, 32, 0.9) !important;
   color: #94a3b8 !important;
-  border-color: rgba(80, 110, 160, 0.3) !important;
+  border-color: rgba(80, 110, 160, 0.25) !important;
   width: 36px !important; height: 36px !important; line-height: 36px !important;
-  font-size: 18px !important;
 }
 .leaflet-bar a:hover { background: rgba(30, 58, 95, 0.7) !important; color: #e2e8f0 !important; }
-.leaflet-bar { border: none !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important; border-radius: 12px !important; overflow: hidden; }
-
-/* tooltip styling */
-.leaflet-tooltip { font-family: -apple-system, sans-serif !important; }
+.leaflet-bar { border: none !important; box-shadow: 0 4px 14px rgba(0,0,0,0.4) !important; border-radius: 12px !important; overflow: hidden; }
