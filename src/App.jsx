@@ -20,6 +20,7 @@ import { TOAST_LIFE_MS, STATUS_POLL_MS } from './lib/theme'
 import Header from './components/Header'
 import Tabs from './components/Tabs'
 import CorridorView from './components/CorridorView'
+import MapView from './components/MapView'
 import Heatmap from './components/Heatmap'
 import Log from './components/Log'
 import About from './components/About'
@@ -368,6 +369,16 @@ export default function App() {
             alerts={alerts}
             setAlerts={setAlerts}
             serverStatus={serverStatus}
+          />
+        )}
+        {tab === 'map' && (
+          <MapView
+            detections={detections}
+            propagated={propagated}
+            onSelect={(c) => {
+              setSelected(c)
+              setTab('corridor')
+            }}
           />
         )}
         {tab === 'heatmap' && <Heatmap history={combinedHistory} />}

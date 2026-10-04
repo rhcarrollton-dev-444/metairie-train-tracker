@@ -1,5 +1,6 @@
 const TABS = [
   { id: 'corridor', label: '🗺 Corridor' },
+  { id: 'map', label: '📍 Map' },
   { id: 'heatmap', label: '🔥 Heatmap' },
   { id: 'log', label: '📋 Log' },
   { id: 'about', label: 'ℹ About' },
