@@ -351,7 +351,7 @@ export default function App() {
         serverStatus={serverStatus}
       />
       <Tabs tab={tab} setTab={setTab} />
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div style={{ flex: 1, overflowY: tab === 'map' ? 'hidden' : 'auto', display: 'flex', flexDirection: 'column' }}>
         {tab === 'corridor' && (
           <CorridorView
             detections={detections}

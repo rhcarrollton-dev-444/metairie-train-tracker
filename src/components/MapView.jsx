@@ -32,11 +32,18 @@ function getTrackRef(crossing) {
   return null
 }
 
+// Check if a crossing's mile marker is between the train's source and current position
+function isTrainNearCrossing(trainMile, sourceMile, crossingMile) {
+  const lo = Math.min(trainMile, sourceMile)
+  const hi = Math.max(trainMile, sourceMile)
+  return crossingMile >= lo - 0.05 && crossingMile <= hi + 0.05
+}
+
 function estimateTrains(detections, propagated, serverStatus, history) {
   const trains = []
-  const seen = new Set() // avoid duplicating same train from multiple sources
+  const seen = new Set()
 
-  // 1. Check live camera status (current poll)
+  // 1. Live camera status
   for (const cam of ALL_WITH_CAMERA) {
     const serverCam = serverStatus?.cameras?.[cam.id] || (cam.id === 'metairie' ? serverStatus?.metairie : null)
     const localDet = detections[cam.id]
@@ -47,13 +54,15 @@ function estimateTrains(detections, propagated, serverStatus, history) {
     const pos = trackData.crossings[cam.id]
     if (!pos) continue
     const tref = getTrackRef(cam)
-    const speed = det.speed_estimate_mph || 15
-    const dir = det.direction || 'unknown'
+    const speed = det.speed_estimate_mph || 0
+    const dir = det.direction || 'stopped'
     const fetchedAt = det.fetchedAt || det.checkedAt || Date.now()
     const elapsedMin = (Date.now() - fetchedAt) / 60000
+    const isStopped = dir === 'stopped' || dir === 'none' || dir === 'unknown' || speed === 0
+    const blocked = det.crossing_blocked
 
-    if (!tref || !dir || dir === 'none' || dir === 'stopped') {
-      trains.push({ lat: pos.lat, lng: pos.lng, speed: dir === 'stopped' ? 0 : speed, direction: dir, source: cam.short || cam.name, sourceId: cam.id, elapsedMin, etas: {}, onTrack: !!tref, stopped: dir === 'stopped', corridor: cam.corridor || 'ns', ghost: false })
+    if (!tref || isStopped) {
+      trains.push({ lat: pos.lat, lng: pos.lng, speed: 0, direction: dir, source: cam.short || cam.name, sourceId: cam.id, elapsedMin, etas: {}, passedCrossings: [cam.id], onTrack: !!tref, stopped: true, blocked, corridor: cam.corridor || 'ns', ghost: false })
       continue
     }
 
@@ -67,10 +76,19 @@ function estimateTrains(detections, propagated, serverStatus, history) {
     const clampedMile = Math.max(0, Math.min(maxMile, currentMile))
     const interpolated = interpolateOnTrack(clampedMile, ref)
 
+    // ETAs only for moving trains
     const etas = {}
     for (const [cid, cMile] of Object.entries(ref.crossings)) {
       const dist = (cMile - currentMile) * sign
       if (dist > 0.02) etas[cid] = { mins: (dist / speed) * 60, distMiles: dist }
+    }
+
+    // Crossings the train has PASSED (between source and current position)
+    const passedCrossings = [cam.id]
+    for (const [cid, cMile] of Object.entries(ref.crossings)) {
+      if (cid !== cam.id && isTrainNearCrossing(clampedMile, sourceMile, cMile)) {
+        passedCrossings.push(cid)
+      }
     }
 
     const predictedPath = []
@@ -86,39 +104,38 @@ function estimateTrains(detections, propagated, serverStatus, history) {
       if (ref.mileRef[i] >= lo && ref.mileRef[i] <= hi) traveledPath.push(ref.polyline[i])
     }
 
-    trains.push({ lat: interpolated[0], lng: interpolated[1], speed, direction: dir, source: cam.short || cam.name, sourceId: cam.id, elapsedMin, currentMile: clampedMile, etas, onTrack: true, corridor: cam.corridor || 'ns', predictedPath, traveledPath, ghost: false })
+    trains.push({ lat: interpolated[0], lng: interpolated[1], speed, direction: dir, source: cam.short || cam.name, sourceId: cam.id, elapsedMin, currentMile: clampedMile, etas, passedCrossings, onTrack: true, blocked, corridor: cam.corridor || 'ns', predictedPath, traveledPath, ghost: false })
   }
 
-  // 2. Check recent history for trains not in current status (ghost trains)
-  // A train seen <30 min ago is probably still on the corridor somewhere
+  // 2. Ghost trains from recent history
   if (Array.isArray(history)) {
     const now = Date.now()
-    const MAX_AGE_MS = 30 * 60 * 1000 // 30 minutes
+    const MAX_AGE_MS = 30 * 60 * 1000
     const recentTrains = history
       .filter((h) => h.train_present && h.ts && (now - h.ts) < MAX_AGE_MS)
       .sort((a, b) => b.ts - a.ts)
 
-    // Group by crossing — take only the most recent per crossing
     const byCrossing = {}
     for (const h of recentTrains) {
       if (!byCrossing[h.crossingId]) byCrossing[h.crossingId] = h
     }
 
     for (const [cid, h] of Object.entries(byCrossing)) {
-      if (seen.has(cid)) continue // already showing from live status
+      if (seen.has(cid)) continue
       const cam = ALL.find((c) => c.id === cid)
       if (!cam) continue
       const pos = trackData.crossings[cid]
       if (!pos) continue
 
       const tref = getTrackRef(cam)
-      const speed = h.speed_estimate_mph || 15
-      const dir = h.direction || 'unknown'
+      const speed = h.speed_estimate_mph || 0
+      const dir = h.direction || 'stopped'
       const elapsedMin = (now - h.ts) / 60000
-      const confidence = Math.max(0.2, 1 - elapsedMin / 30) // fades over 30 min
+      const confidence = Math.max(0.2, 1 - elapsedMin / 30)
+      const isStopped = dir === 'stopped' || dir === 'none' || dir === 'unknown' || speed === 0
 
-      if (!tref || !dir || dir === 'none' || dir === 'stopped') {
-        trains.push({ lat: pos.lat, lng: pos.lng, speed: dir === 'stopped' ? 0 : speed, direction: dir, source: cam.short || cam.name, sourceId: cid, elapsedMin, etas: {}, onTrack: !!tref, stopped: dir === 'stopped', corridor: cam.corridor || 'ns', ghost: true, confidence })
+      if (!tref || isStopped) {
+        trains.push({ lat: pos.lat, lng: pos.lng, speed: 0, direction: dir, source: cam.short || cam.name, sourceId: cid, elapsedMin, etas: {}, passedCrossings: [cid], onTrack: !!tref, stopped: true, corridor: cam.corridor || 'ns', ghost: true, confidence })
         continue
       }
 
@@ -139,13 +156,20 @@ function estimateTrains(detections, propagated, serverStatus, history) {
         if (dist > 0.02) etas[ecid] = { mins: (dist / speed) * 60, distMiles: dist }
       }
 
+      const passedCrossings = [cid]
+      for (const [pcid, cMile] of Object.entries(ref.crossings)) {
+        if (pcid !== cid && isTrainNearCrossing(clampedMile, sourceMile, cMile)) {
+          passedCrossings.push(pcid)
+        }
+      }
+
       const predictedPath = []
       for (let i = 0; i < ref.mileRef.length; i++) {
         const ahead = (ref.mileRef[i] - clampedMile) * sign
         if (ahead > 0 && ahead < 3) predictedPath.push(ref.polyline[i])
       }
 
-      trains.push({ lat: interpolated[0], lng: interpolated[1], speed, direction: dir, source: cam.short || cam.name, sourceId: cid, elapsedMin, currentMile: clampedMile, etas, onTrack: true, corridor: cam.corridor || 'ns', predictedPath, ghost: true, confidence })
+      trains.push({ lat: interpolated[0], lng: interpolated[1], speed, direction: dir, source: cam.short || cam.name, sourceId: cid, elapsedMin, currentMile: clampedMile, etas, passedCrossings, onTrack: true, corridor: cam.corridor || 'ns', predictedPath, ghost: true, confidence })
     }
   }
 
@@ -183,15 +207,11 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
       className: 'mtt-dark-tiles',
     }).addTo(map)
 
-    // Rail tracks — glowing line effect (wide blur + narrow bright core)
     for (const [name, segs] of Object.entries(trackData.tracks)) {
       const color = name.includes('Back Belt') ? '#3b82f6' : name.includes('McComb') ? '#8b5cf6' : '#a855f7'
       for (const seg of segs) {
-        // outer glow
         L.polyline(seg, { color, weight: 10, opacity: 0.15, className: 'mtt-glow' }).addTo(map)
-        // mid glow
         L.polyline(seg, { color, weight: 5, opacity: 0.35 }).addTo(map)
-        // bright core
         L.polyline(seg, { color, weight: 2, opacity: 0.9 }).addTo(map)
       }
     }
@@ -202,7 +222,7 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
     return () => { map.remove(); mapRef.current = null; layersRef.current = { crossings: {}, trains: [], trails: [] } }
   }, [])
 
-  // ── crossing markers — always visible ──
+  // ── crossing markers — always visible, status from BOTH server + train engine ──
   useEffect(() => {
     const map = mapRef.current
     if (!map || !ready) return
@@ -216,6 +236,9 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
       const trainPresent = det?.train_present || serverCam?.train_present
       const blocked = trainPresent && (det?.crossing_blocked || serverCam?.crossing_blocked)
 
+      // Check if any train has PASSED this crossing (between source and current pos)
+      const passedBy = trains.some((t) => t.passedCrossings?.includes(c.id))
+
       // ETA from any train
       let etaMin = null
       for (const t of trains) {
@@ -224,7 +247,7 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
 
       let dotColor, status
       if (blocked) { dotColor = '#ef4444'; status = 'BLOCKED' }
-      else if (trainPresent) { dotColor = '#f97316'; status = 'TRAIN' }
+      else if (trainPresent || passedBy) { dotColor = '#f97316'; status = trainPresent ? 'TRAIN' : 'PASSING' }
       else if (etaMin != null && etaMin < 20) { dotColor = '#ef4444'; status = `${Math.ceil(etaMin)} min` }
       else { dotColor = '#22c55e'; status = null }
 
@@ -259,39 +282,36 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
     const map = mapRef.current
     if (!map || !ready) return
 
-    // Clear previous
     for (const l of layersRef.current.trains) map.removeLayer(l)
     for (const l of layersRef.current.trails) map.removeLayer(l)
     layersRef.current.trains = []
     layersRef.current.trails = []
 
     for (const t of trains) {
-      const isWest = t.direction === 'westbound'
-      const trainColor = isWest ? '#ef4444' : '#3b82f6'
+      // Colors: ghost=orange, live=red (never blue — blends with tracks)
+      const trainColor = t.ghost ? '#f59e0b' : '#ef4444'
       const opacity = t.ghost ? (t.confidence || 0.5) : 1
 
-      // Traveled path (solid colored line)
       if (t.traveledPath?.length > 1) {
         const tl = L.polyline(t.traveledPath, { color: trainColor, weight: 4, opacity: 0.6 * opacity }).addTo(map)
         layersRef.current.trails.push(tl)
       }
 
-      // Predicted path (dashed line ahead)
-      if (t.predictedPath?.length > 1) {
+      if (!t.stopped && t.predictedPath?.length > 1) {
         const pl = L.polyline(t.predictedPath, { color: trainColor, weight: 3, opacity: 0.35 * opacity, dashArray: '6 8' }).addTo(map)
         layersRef.current.trails.push(pl)
       }
 
-      // Train dot
       const ghostClass = t.ghost ? ' mtt-td-ghost' : ''
       const agoLabel = t.ghost ? `<div class="mtt-td-ago">${Math.round(t.elapsedMin)}m ago</div>` : ''
+      const arrow = t.stopped ? '■' : t.direction === 'westbound' ? '←' : '→'
       const trainIcon = L.divIcon({
         className: 'mtt-train-dot',
         html: `<div class="mtt-td-wrap${ghostClass}" style="--tc:${trainColor};--op:${opacity}">
           <div class="mtt-td-ring"></div>
           <div class="mtt-td-ring mtt-td-ring2"></div>
           <div class="mtt-td-core"></div>
-          <div class="mtt-td-arrow">${isWest ? '←' : '→'}</div>
+          <div class="mtt-td-arrow">${arrow}</div>
           ${agoLabel}
         </div>`,
         iconSize: [40, 40],
@@ -302,7 +322,6 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
     }
   }, [ready, trains])
 
-  // Auto-fly on first detection
   const prevCount = useRef(0)
   useEffect(() => {
     if (trains.length > 0 && prevCount.current === 0 && mapRef.current) {
@@ -318,59 +337,53 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
   }, [trains])
 
   return (
-    <div style={{ position: 'relative', height: 'calc(100vh - 96px)', minHeight: 460, touchAction: 'manipulation' }}>
+    <div style={{ position: 'relative', height: '100%', flex: 1, minHeight: 0, touchAction: 'manipulation' }}>
       <div id="mtt-map" style={{ position: 'absolute', inset: 0, background: '#080b10' }} />
-
-      {/* header strip */}
-      <div className="mtt-glass mtt-hdr">
-        <span className="mtt-hdr-title">Metairie Crossings</span>
-        <span className={`mtt-hdr-live${trains.length > 0 ? ' mtt-hdr-live-on' : ''}`}>
-          {trains.length > 0 ? '● Live' : '● Clear'}
-        </span>
-      </div>
 
       {/* directional labels */}
       <div className="mtt-dir mtt-dir-w">← Kenner</div>
       <div className="mtt-dir mtt-dir-e">New Orleans →</div>
 
-      {/* train info cards at bottom — the key UX from concept #2 */}
+      {/* train info cards at bottom — ALL trains, not just some */}
       {trains.length > 0 && (
         <div className="mtt-cards">
           {trains.map((t, i) => {
-            const isWest = t.direction === 'westbound'
             const nextEntries = Object.entries(t.etas).sort((a, b) => a[1].mins - b[1].mins)
             const next = nextEntries[0]
             const nextXing = next ? ALL.find((c) => c.id === next[0]) : null
+            const cardColor = t.ghost ? '#f59e0b' : '#ef4444'
+            const cardColorLight = t.ghost ? '#fbbf24' : '#fca5a5'
+            const dirLabel = t.stopped ? '■ Stopped' : t.direction === 'westbound' ? '← Westbound' : 'Eastbound →'
             return (
-              <div key={i} className="mtt-glass mtt-card" style={{ borderColor: isWest ? 'rgba(239,68,68,0.3)' : 'rgba(59,130,246,0.3)' }}
+              <div key={i} className="mtt-glass mtt-card" style={{ borderColor: `${cardColor}33` }}
                 onClick={() => mapRef.current?.flyTo([t.lat, t.lng], 15, { duration: 0.8 })}>
                 <div className="mtt-card-top">
-                  <div className="mtt-card-dir" style={{ color: isWest ? '#fca5a5' : '#93c5fd' }}>
-                    {isWest ? '← Westbound' : 'Eastbound →'}
+                  <div className="mtt-card-dir" style={{ color: cardColorLight }}>
+                    {dirLabel}
                     {t.ghost && <span style={{ color: '#64748b', fontWeight: 400, marginLeft: 6 }}>estimated</span>}
+                    {t.blocked && <span style={{ color: '#ef4444', fontWeight: 800, marginLeft: 6 }}>BLOCKED</span>}
                   </div>
-                  <div className="mtt-card-eta" style={{ color: isWest ? '#ef4444' : '#3b82f6' }}>
-                    {next ? `${Math.ceil(next[1].mins)} min` : t.stopped ? 'Stopped' : '—'}
+                  <div className="mtt-card-eta" style={{ color: cardColor }}>
+                    {t.stopped ? (t.blocked ? 'Blocked' : 'Stopped') : next ? `${Math.ceil(next[1].mins)} min` : '—'}
                   </div>
                 </div>
                 <div className="mtt-card-dest">
-                  {nextXing ? `to ${nextXing.name}` : `at ${t.source}`}
+                  {t.stopped ? `at ${t.source}` : nextXing ? `to ${nextXing.name}` : `from ${t.source}`}
                 </div>
                 <div className="mtt-card-stats">
                   {t.speed > 0 && <span>{t.speed} mph</span>}
                   {next && <span>{next[1].distMiles.toFixed(1)} mi</span>}
-                  <span>from {t.source}</span>
+                  <span>{t.ghost ? `seen ${Math.round(t.elapsedMin)}m ago at ` : 'from '}{t.source}</span>
                 </div>
-                {/* upcoming crossings list */}
-                {nextEntries.length > 1 && (
+                {nextEntries.length > 0 && !t.stopped && (
                   <div className="mtt-card-upcoming">
-                    {nextEntries.slice(0, 3).map(([cid, info]) => {
+                    {nextEntries.slice(0, 4).map(([cid, info]) => {
                       const x = ALL.find((c) => c.id === cid)
                       return (
                         <div key={cid} className="mtt-card-next">
-                          <span className="mtt-card-next-x" style={{ color: isWest ? '#ef4444' : '#3b82f6' }}>⊗</span>
+                          <span className="mtt-card-next-x" style={{ color: cardColor }}>⊗</span>
                           <span className="mtt-card-next-name">{x?.short || cid}</span>
-                          <span className="mtt-card-next-eta" style={{ color: isWest ? '#fca5a5' : '#93c5fd' }}>{Math.ceil(info.mins)} min</span>
+                          <span className="mtt-card-next-eta" style={{ color: cardColorLight }}>{Math.ceil(info.mins)} min</span>
                         </div>
                       )
                     })}
