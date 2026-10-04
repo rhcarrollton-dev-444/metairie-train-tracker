@@ -29,7 +29,7 @@ export function propagate(detection, source) {
     const delta = c.distFromMetairie - source.distFromMetairie
     if (delta === 0) continue
     const distMiles = Math.abs(delta)
-    const baseConf = detection.confidence ?? 0.8
+    const baseConf = detection.confidence ?? 0.5
     const ahead = eastbound ? delta > 0 : delta < 0
     if (ahead) {
       result[c.id] = {
@@ -65,7 +65,7 @@ export function propagate(detection, source) {
       const delta = c.distFromMetairie - source.distFromMetairie
       if (delta >= 0) continue // CN crossings are all west (negative distFromMetairie)
       const distMiles = Math.abs(delta)
-      const baseConf = detection.confidence ?? 0.8
+      const baseConf = detection.confidence ?? 0.5
       result[c.id] = {
         mode: 'approaching',
         eta_mins: minutesPerMile(speed) * distMiles,
