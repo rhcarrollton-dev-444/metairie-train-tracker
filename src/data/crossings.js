@@ -24,9 +24,11 @@ export const CORRIDOR = [
 // Live Oak, Willswood, and Avondale are on a separate UP corridor (Livonia/
 // Avondale subdivisions) and do not connect to Old Metairie near the area.
 export const DOWNSTREAM = [
-  { id: 'central', name: 'Central Ave', short: 'Central', alias: '63609c3400e64', area: 'Jefferson', distFromMetairie: -2.90, corridor: 'cn' },
+  { id: 'jeffersonhwy', name: 'Jefferson Hwy', short: 'Jeff Hwy', alias: '6aaae498d22ac', altAliases: ['6aaae59f77ffa'], area: 'Shrewsbury', distFromMetairie: -2.20, corridor: 'cn' },
+  { id: 'central', name: 'Central Ave', short: 'Central', alias: '63609c3400e64', altAliases: ['6aaae63d530e6', '6aaae68b225d8'], area: 'Jefferson', distFromMetairie: -2.90, corridor: 'cn' },
   { id: 'littlefarms', name: 'Little Farms Ave', short: 'Little Farms', alias: '62b47da483e1f', area: 'River Ridge', distFromMetairie: -5.46, corridor: 'cn' },
   { id: 'filmore', name: 'Filmore St', short: 'Filmore', alias: '6529556348194', area: 'Kenner', distFromMetairie: -6.73, corridor: 'cn' },
+  { id: 'taylor', name: 'Taylor St', short: 'Taylor', alias: '6aaacf1f0f0dc', area: 'Kenner', distFromMetairie: -7.00, corridor: 'cn' },
   { id: 'george', name: 'George St', short: 'George', alias: '635c0c64414c1', area: 'Kenner', distFromMetairie: -7.77, corridor: 'cn' },
   { id: 'avondale', name: 'Avondale Garden Rd', short: 'Avondale', alias: '635c0abb11126', area: 'Avondale', distFromMetairie: null, corridor: 'up' },
   { id: 'liveoak', name: 'Live Oak Blvd', short: 'Live Oak', alias: '635c1059a967e', area: 'Waggaman', distFromMetairie: null, corridor: 'up' },

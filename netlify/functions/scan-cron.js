@@ -25,24 +25,31 @@ const CORRIDOR = [
 // Westbound trains continue onto these. Distances measured from stitched OSM
 // CN mainline polyline 2026-10-02 (Central is closer than Little Farms).
 const CN_CHAIN = [
-  { id: "central",     name: "Central Ave",      dist: -2.90 },
-  { id: "littlefarms", name: "Little Farms Ave", dist: -5.46 },
-  { id: "filmore",     name: "Filmore St",       dist: -6.73 },
-  { id: "george",      name: "George St",        dist: -7.77 },
+  { id: "jeffersonhwy", name: "Jefferson Hwy",    dist: -2.20 },
+  { id: "central",      name: "Central Ave",      dist: -2.90 },
+  { id: "littlefarms",  name: "Little Farms Ave", dist: -5.46 },
+  { id: "filmore",      name: "Filmore St",       dist: -6.73 },
+  { id: "taylor",       name: "Taylor St",        dist: -7.00 },
+  { id: "george",       name: "George St",        dist: -7.77 },
 ];
 
 // Every camera we scan. Corridor cameras anchor propagation; the rest are watch
 // cameras we collect data on. Aliases verified against the JP parish camera page.
 const CAMERAS = [
-  { id: "metairie",    name: "Metairie Rd",        alias: "62fa4c1fb9f5c", corridor: true },
-  { id: "labarre",     name: "Labarre Rd",         alias: "6aaae2ff5b5bc", corridor: true },
-  { id: "littlefarms", name: "Little Farms Ave",   alias: "62b47da483e1f" },
-  { id: "central",     name: "Central Ave",        alias: "63609c3400e64" },
-  { id: "avondale",    name: "Avondale Garden Rd", alias: "635c0abb11126" },
-  { id: "filmore",     name: "Filmore St",         alias: "6529556348194" },
-  { id: "george",      name: "George St",          alias: "635c0c64414c1" },
-  { id: "liveoak",     name: "Live Oak Blvd",      alias: "635c1059a967e" },
-  { id: "willswood",   name: "Willswood Ln",       alias: "635c112681056" },
+  { id: "metairie",      name: "Metairie Rd",        alias: "62fa4c1fb9f5c", corridor: true },
+  { id: "labarre",       name: "Labarre Rd",         alias: "6aaae2ff5b5bc", corridor: true },
+  { id: "jeffersonhwy",  name: "Jefferson Hwy E",    alias: "6aaae498d22ac" },
+  { id: "jeffersonhwy",  name: "Jefferson Hwy W",    alias: "6aaae59f77ffa" },
+  { id: "central",       name: "Central Ave #3",     alias: "63609c3400e64" },
+  { id: "central",       name: "Central Ave #1",     alias: "6aaae63d530e6" },
+  { id: "central",       name: "Central Ave #2",     alias: "6aaae68b225d8" },
+  { id: "littlefarms",   name: "Little Farms Ave",   alias: "62b47da483e1f" },
+  { id: "filmore",       name: "Filmore St",         alias: "6529556348194" },
+  { id: "taylor",        name: "Taylor St",          alias: "6aaacf1f0f0dc" },
+  { id: "george",        name: "George St",          alias: "635c0c64414c1" },
+  { id: "avondale",      name: "Avondale Garden Rd", alias: "635c0abb11126" },
+  { id: "liveoak",       name: "Live Oak Blvd",      alias: "635c1059a967e" },
+  { id: "willswood",     name: "Willswood Ln",       alias: "635c112681056" },
 ];
 
 const VISION_PROMPT = `You are a train detection system analyzing a live railroad crossing camera image from Jefferson Parish, Louisiana. The image may be low resolution — that is fine, you only need to determine if a train is present.
@@ -192,7 +199,14 @@ export default async () => {
       continue;
     }
     const det = res.detection;
-    cameras[cam.id] = { online: true, checkedAt: now, ...det };
+    // Merge multi-camera crossings: if ANY camera at a crossing sees a train, keep it
+    const existing = cameras[cam.id];
+    if (existing?.train_present && !det.train_present) {
+      // Another camera at this crossing already saw a train — don't overwrite with a clear
+      cameras[cam.id] = { ...existing, checkedAt: now };
+    } else {
+      cameras[cam.id] = { online: true, checkedAt: now, ...det };
+    }
     if (cam.corridor) {
       const src = CORRIDOR.find(c => c.id === cam.id);
       if (src) corridorDetections.push({ source: { ...src, name: cam.name }, detection: det });
