@@ -188,6 +188,42 @@ function estimateTrains(detections, propagated, serverStatus, history) {
     }
   }
 
+  // 3. Post-process: if two live trains on the same track, mark all crossings between them
+  // This handles: Metairie blocked + Labarre blocked → Farnham/Hollywood/Atherton also blocked
+  const liveByTrack = {}
+  for (const t of trains) {
+    if (t.ghost || !t.onTrack || !t.sourceId) continue
+    const cam = ALL.find((c) => c.id === t.sourceId)
+    if (!cam) continue
+    const tref = getTrackRef(cam)
+    if (!tref) continue
+    const mile = tref.ref.crossings[t.sourceId]
+    if (mile == null) continue
+    const key = tref.name
+    if (!liveByTrack[key]) liveByTrack[key] = []
+    liveByTrack[key].push({ train: t, mile, tref })
+  }
+
+  for (const [, entries] of Object.entries(liveByTrack)) {
+    if (entries.length < 2) continue
+    // Find the min and max mile markers among live trains on this track
+    const miles = entries.map((e) => e.mile)
+    const lo = Math.min(...miles)
+    const hi = Math.max(...miles)
+    const ref = entries[0].tref.ref
+    // Mark all crossings between lo and hi as passed
+    for (const [cid, cMile] of Object.entries(ref.crossings)) {
+      if (cMile >= lo && cMile <= hi) {
+        // Add to every train's passedCrossings on this track
+        for (const e of entries) {
+          if (!e.train.passedCrossings.includes(cid)) {
+            e.train.passedCrossings.push(cid)
+          }
+        }
+      }
+    }
+  }
+
   return trains
 }
 
@@ -258,13 +294,18 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
       }
 
       // Color logic:
-      //   red = blocked/stopped train here
-      //   orange = train moving through / passing
+      //   red = camera-confirmed blocked/stopped
+      //   orange = camera-confirmed train moving through
+      //   yellow = LIKELY BLOCKED (inferred — between two blocked cameras, no camera here)
       //   amber with ETA = train approaching
       //   green = clear
+      const hasCamera = c.hasCamera || !!c.alias
+      const inferredBlocked = passedBy && !hasCamera && !trainPresent
+
       let dotColor, status
       if (blocked) { dotColor = '#ef4444'; status = 'BLOCKED' }
       else if (trainPresent) { dotColor = '#f97316'; status = 'TRAIN' }
+      else if (inferredBlocked) { dotColor = '#eab308'; status = 'LIKELY BLOCKED' }
       else if (passedBy) { dotColor = '#f97316'; status = 'PASSING' }
       else if (etaMin != null && etaMin < 20) { dotColor = '#fbbf24'; status = `${Math.ceil(etaMin)}m` }
       else { dotColor = '#22c55e'; status = null }
