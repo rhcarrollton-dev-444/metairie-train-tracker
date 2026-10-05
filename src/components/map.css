@@ -24,30 +24,36 @@
 .mtt-dir-w { left: 14px; top: 50%; transform: translateY(-50%); }
 .mtt-dir-e { right: 14px; top: 50%; transform: translateY(-50%); }
 
-/* ── crossing markers (⊗ style from concept #2) ── */
+/* ── crossing markers — compact dot + chip, name in tooltip ── */
 .mtt-cx { pointer-events: auto; }
 .mtt-cx-wrap {
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
-  min-width: 60px;
 }
-.mtt-cx-x {
-  font-size: 20px; font-weight: 900;
-  text-shadow: 0 0 8px currentColor;
-  line-height: 1;
+.mtt-cx-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid rgba(8, 11, 16, 0.8);
 }
-.mtt-cx-name {
-  font-size: 10px; font-weight: 700; color: #94a3b8;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+.mtt-cx-chip {
+  font-size: 9px; font-weight: 800; color: #080b10;
+  padding: 1px 6px; border-radius: 10px;
   white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
-.mtt-cx-eta {
-  font-size: 9px; font-weight: 800; color: #fff;
-  padding: 1.5px 8px; border-radius: 20px;
-  margin-top: 1px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  white-space: nowrap;
+
+/* crossing tooltip — dark glass, auto-positioned by Leaflet (no overlap) */
+.mtt-cx-tip {
+  background: rgba(8, 11, 16, 0.92) !important;
+  border: 1px solid rgba(80, 110, 160, 0.3) !important;
+  border-radius: 8px !important;
+  color: #cbd5e1 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  padding: 3px 10px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+  white-space: nowrap !important;
 }
+.mtt-cx-tip::before { border-top-color: rgba(8, 11, 16, 0.92) !important; }
 
 /* ── train dot (glowing circle, not emoji — concept #2 style) ── */
 .mtt-train-dot { pointer-events: none; }

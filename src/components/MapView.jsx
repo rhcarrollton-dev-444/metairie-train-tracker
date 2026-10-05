@@ -127,6 +127,13 @@ function estimateTrains(detections, propagated, serverStatus, history) {
       const pos = trackData.crossings[cid]
       if (!pos) continue
 
+      // If the camera has scanned AFTER this sighting and says clear, the train left — no ghost
+      const serverCam = serverStatus?.cameras?.[cid] || (cid === 'metairie' ? serverStatus?.metairie : null)
+      if (serverCam && !serverCam.train_present) {
+        const camTime = serverCam.checkedAt || 0
+        if (camTime > h.ts) continue // camera confirmed clear after the sighting
+      }
+
       const tref = getTrackRef(cam)
       const speed = h.speed_estimate_mph || 0
       const dir = h.direction || 'stopped'
@@ -235,44 +242,76 @@ export default function Map({ detections, propagated, onSelect, serverStatus, hi
       const serverCam = serverStatus?.cameras?.[c.id] || (c.id === 'metairie' ? serverStatus?.metairie : null)
       const trainPresent = det?.train_present || serverCam?.train_present
       const blocked = trainPresent && (det?.crossing_blocked || serverCam?.crossing_blocked)
-
-      // Check if any train has PASSED this crossing (between source and current pos)
       const passedBy = trains.some((t) => t.passedCrossings?.includes(c.id))
 
-      // ETA from any train
       let etaMin = null
       for (const t of trains) {
         if (t.etas[c.id]) { etaMin = t.etas[c.id].mins; break }
       }
 
+      // Color logic:
+      //   red = blocked/stopped train here
+      //   orange = train moving through / passing
+      //   amber with ETA = train approaching
+      //   green = clear
       let dotColor, status
       if (blocked) { dotColor = '#ef4444'; status = 'BLOCKED' }
-      else if (trainPresent || passedBy) { dotColor = '#f97316'; status = trainPresent ? 'TRAIN' : 'PASSING' }
-      else if (etaMin != null && etaMin < 20) { dotColor = '#ef4444'; status = `${Math.ceil(etaMin)} min` }
+      else if (trainPresent) { dotColor = '#f97316'; status = 'TRAIN' }
+      else if (passedBy) { dotColor = '#f97316'; status = 'PASSING' }
+      else if (etaMin != null && etaMin < 20) { dotColor = '#fbbf24'; status = `${Math.ceil(etaMin)}m` }
       else { dotColor = '#22c55e'; status = null }
 
       const urgent = !!status
       const name = c.short || c.name.split(' ')[0]
-      const cam = (c.hasCamera || c.alias) ? ' 📷' : ''
+
+      // Compact dot + optional ETA chip — name goes in tooltip (no overlap)
+      const chipHtml = status
+        ? `<div class="mtt-cx-chip${urgent && etaMin != null && etaMin < 3 ? ' mtt-pulse' : ''}" style="background:${dotColor}">${status}</div>`
+        : ''
 
       const icon = L.divIcon({
         className: 'mtt-cx',
         html: `<div class="mtt-cx-wrap">
-          <div class="mtt-cx-x" style="color:${dotColor}">⊗</div>
-          <div class="mtt-cx-name">${name}${cam}</div>
-          ${status ? `<div class="mtt-cx-eta${urgent && etaMin != null && etaMin < 3 ? ' mtt-pulse' : ''}" style="background:${dotColor}">${status}</div>` : ''}
+          <div class="mtt-cx-dot" style="background:${dotColor};box-shadow:0 0 ${urgent ? 10 : 5}px ${dotColor}"></div>
+          ${chipHtml}
         </div>`,
-        iconSize: [90, 50],
-        iconAnchor: [45, 25],
+        iconSize: [60, 32],
+        iconAnchor: [30, 16],
       })
 
       if (layersRef.current.crossings[c.id]) {
         layersRef.current.crossings[c.id].setIcon(icon)
+        // Update tooltip content
+        layersRef.current.crossings[c.id].setTooltipContent(
+          `${name}${status ? ` — ${status}` : ''}`
+        )
       } else {
         const m = L.marker([pos.lat, pos.lng], { icon, zIndexOffset: urgent ? 400 : 50 })
+          .bindTooltip(`${name}${status ? ` — ${status}` : ''}`, {
+            direction: 'top',
+            offset: [0, -10],
+            className: 'mtt-cx-tip',
+            permanent: urgent, // only show permanently when train-relevant
+          })
           .on('click', () => onSelect?.(c))
         m.addTo(map)
         layersRef.current.crossings[c.id] = m
+      }
+
+      // Toggle permanent tooltip based on urgency
+      const tip = layersRef.current.crossings[c.id].getTooltip()
+      if (tip) {
+        if (urgent && !tip.options.permanent) {
+          layersRef.current.crossings[c.id].unbindTooltip()
+          layersRef.current.crossings[c.id].bindTooltip(`${name} — ${status}`, {
+            direction: 'top', offset: [0, -10], className: 'mtt-cx-tip', permanent: true,
+          })
+        } else if (!urgent && tip.options.permanent) {
+          layersRef.current.crossings[c.id].unbindTooltip()
+          layersRef.current.crossings[c.id].bindTooltip(name, {
+            direction: 'top', offset: [0, -10], className: 'mtt-cx-tip', permanent: false,
+          })
+        }
       }
     }
   }, [ready, detections, propagated, serverStatus, trains, onSelect])
