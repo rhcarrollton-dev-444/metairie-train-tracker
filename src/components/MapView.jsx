@@ -107,7 +107,10 @@ function estimateTrains(detections, propagated, serverStatus, history) {
     trains.push({ lat: interpolated[0], lng: interpolated[1], speed, direction: dir, source: cam.short || cam.name, sourceId: cam.id, elapsedMin, currentMile: clampedMile, etas, passedCrossings, onTrack: true, blocked, corridor: cam.corridor || 'ns', predictedPath, traveledPath, ghost: false })
   }
 
-  // 2. Ghost trains from recent history
+  // 2. Ghost trains from recent history — ONLY for moving trains
+  // A ghost is valid when: camera saw a MOVING train, and camera NOW says clear
+  // (proving the train moved past). Stopped trains with clear camera = train left
+  // but direction unknown, so we can't extrapolate.
   if (Array.isArray(history)) {
     const now = Date.now()
     const MAX_AGE_MS = 30 * 60 * 1000
@@ -115,40 +118,38 @@ function estimateTrains(detections, propagated, serverStatus, history) {
       .filter((h) => h.train_present && h.ts && (now - h.ts) < MAX_AGE_MS)
       .sort((a, b) => b.ts - a.ts)
 
+    // Take only the most recent sighting per crossing
     const byCrossing = {}
     for (const h of recentTrains) {
       if (!byCrossing[h.crossingId]) byCrossing[h.crossingId] = h
     }
 
     for (const [cid, h] of Object.entries(byCrossing)) {
-      if (seen.has(cid)) continue
+      if (seen.has(cid)) continue // already showing live
       const cam = ALL.find((c) => c.id === cid)
       if (!cam) continue
       const pos = trackData.crossings[cid]
       if (!pos) continue
 
-      // If the camera has scanned AFTER this sighting and says clear, the train left — no ghost
+      const dir = h.direction || 'stopped'
+      const speed = h.speed_estimate_mph || 0
+      const isMoving = (dir === 'westbound' || dir === 'eastbound') && speed > 0
+
+      // Only show ghost if: train was MOVING and camera now says clear
+      // (camera clear = train moved past = valid extrapolation)
       const serverCam = serverStatus?.cameras?.[cid] || (cid === 'metairie' ? serverStatus?.metairie : null)
-      if (serverCam && !serverCam.train_present) {
-        const camTime = serverCam.checkedAt || 0
-        if (camTime > h.ts) continue // camera confirmed clear after the sighting
-      }
+      const cameraClear = serverCam && !serverCam.train_present
+      if (!isMoving) continue // stopped/unknown direction = can't extrapolate
+      if (!cameraClear) continue // camera still shows train = live, not ghost (handled above)
 
       const tref = getTrackRef(cam)
-      const speed = h.speed_estimate_mph || 0
-      const dir = h.direction || 'stopped'
-      const elapsedMin = (now - h.ts) / 60000
-      const confidence = Math.max(0.2, 1 - elapsedMin / 30)
-      const isStopped = dir === 'stopped' || dir === 'none' || dir === 'unknown' || speed === 0
-
-      if (!tref || isStopped) {
-        trains.push({ lat: pos.lat, lng: pos.lng, speed: 0, direction: dir, source: cam.short || cam.name, sourceId: cid, elapsedMin, etas: {}, passedCrossings: [cid], onTrack: !!tref, stopped: true, corridor: cam.corridor || 'ns', ghost: true, confidence })
-        continue
-      }
-
+      if (!tref) continue
       const { ref, name: tName } = tref
       const sourceMile = ref.crossings[cid]
       if (sourceMile == null) continue
+
+      const elapsedMin = (now - h.ts) / 60000
+      const confidence = Math.max(0.3, 1 - elapsedMin / 30)
       const milesTraveled = (speed / 60) * elapsedMin
       const westSign = tName === 'backBelt' ? 1 : -1
       const sign = dir === 'westbound' ? westSign : -westSign
@@ -157,12 +158,14 @@ function estimateTrains(detections, propagated, serverStatus, history) {
       const clampedMile = Math.max(0, Math.min(maxMile, currentMile))
       const interpolated = interpolateOnTrack(clampedMile, ref)
 
+      // ETAs to crossings ahead
       const etas = {}
       for (const [ecid, cMile] of Object.entries(ref.crossings)) {
         const dist = (cMile - currentMile) * sign
         if (dist > 0.02) etas[ecid] = { mins: (dist / speed) * 60, distMiles: dist }
       }
 
+      // Crossings the ghost has passed
       const passedCrossings = [cid]
       for (const [pcid, cMile] of Object.entries(ref.crossings)) {
         if (pcid !== cid && isTrainNearCrossing(clampedMile, sourceMile, cMile)) {
@@ -176,7 +179,12 @@ function estimateTrains(detections, propagated, serverStatus, history) {
         if (ahead > 0 && ahead < 3) predictedPath.push(ref.polyline[i])
       }
 
-      trains.push({ lat: interpolated[0], lng: interpolated[1], speed, direction: dir, source: cam.short || cam.name, sourceId: cid, elapsedMin, currentMile: clampedMile, etas, passedCrossings, onTrack: true, corridor: cam.corridor || 'ns', predictedPath, ghost: true, confidence })
+      trains.push({
+        lat: interpolated[0], lng: interpolated[1], speed, direction: dir,
+        source: cam.short || cam.name, sourceId: cid, elapsedMin,
+        currentMile: clampedMile, etas, passedCrossings, onTrack: true,
+        corridor: cam.corridor || 'ns', predictedPath, ghost: true, confidence,
+      })
     }
   }
 
