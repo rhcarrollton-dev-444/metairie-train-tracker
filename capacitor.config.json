@@ -6,6 +6,7 @@
     "contentInset": "never"
   },
   "server": {
-    "androidScheme": "https"
+    "url": "https://fascinating-platypus-46f604.netlify.app",
+    "cleartext": false
   }
 }
